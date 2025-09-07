@@ -1,50 +1,149 @@
 {
-  "title": "PostgreSQL HA Cluster Dashboard",
-  "timezone": "browser",
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
   "panels": [
     {
       "type": "stat",
-      "title": "PostgreSQL Availability",
+      "title": "Replication Lag Alert",
+      "id": 99,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "YOUR_PROM_DS_UID"
+      },
       "targets": [
-        { "expr": "postgres_up", "legendFormat": "Up Status" }
-      ]
+        {
+          "expr": "postgres_replication_lag_alert",
+          "legendFormat": "Lag Alert",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "red", "value": 1 }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": { "text": "OK" },
+                "1": { "text": "ALERT" }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      }
     },
     {
-      "type": "stat",
-      "title": "Node Role (0=Primary, 1=Replica)",
+      "type": "timeseries",
+      "title": "Failover Events",
+      "id": 100,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "YOUR_PROM_DS_UID"
+      },
       "targets": [
-        { "expr": "postgres_in_recovery", "legendFormat": "Role" }
-      ]
-    },
-    {
-      "type": "graph",
-      "title": "Replication Lag (seconds)",
-      "targets": [
-        { "expr": "postgres_replication_lag_seconds", "legendFormat": "{{instance}}" }
-      ]
-    },
-    {
-      "type": "graph",
-      "title": "Active Connections",
-      "targets": [
-        { "expr": "pg_stat_activity_count", "legendFormat": "{{instance}}" }
-      ]
-    },
-    {
-      "type": "graph",
-      "title": "CPU Usage (%)",
-      "targets": [
-        { "expr": "100 - (avg by(instance) (irate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)", "legendFormat": "{{instance}}" }
-      ]
-    },
-    {
-      "type": "graph",
-      "title": "Memory Usage (%)",
-      "targets": [
-        { "expr": "(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100", "legendFormat": "{{instance}}" }
-      ]
+        {
+          "expr": "postgres_in_recovery",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "lines",
+            "lineInterpolation": "linear",
+            "barAlignment": 0,
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "pointSize": 4,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "showPoints": "auto",
+            "spanNulls": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 6,
+        "y": 0
+      }
     }
   ],
-  "schemaVersion": 27,
+  "schemaVersion": 36,
+  "style": "dark",
+  "tags": ["postgresql", "ha", "monitoring"],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "PostgreSQL HA Cluster Dashboard",
+  "uid": "postgresql-ha-dashboard",
   "version": 1
 }

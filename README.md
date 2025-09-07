@@ -158,17 +158,13 @@ export MASTER_IP="10.0.2.101"
 
 This project includes Prometheus + Grafana integration for real-time cluster monitoring, with `healthcheck.sh` integrated into Node Exporter’s textfile collector for unified metrics.
 
-The improved `healthcheck.sh` now includes a **replication lag threshold** feature, generating an additional alert metric when lag exceeds a configurable limit.
+The improved `healthcheck.sh` includes a **replication lag threshold** feature, generating an additional alert metric when lag exceeds a configurable limit.
 
 Example metrics:
 ```
-# HELP postgres_up PostgreSQL availability (1=up, 0=down)
 postgres_up 1
-# HELP postgres_in_recovery Node role (1=replica, 0=primary)
 postgres_in_recovery 0
-# HELP postgres_replication_lag_seconds Replication lag in seconds
 postgres_replication_lag_seconds 0
-# HELP postgres_replication_lag_alert Replication lag alert (1=above threshold, 0=ok)
 postgres_replication_lag_alert 0
 ```
 
@@ -179,6 +175,22 @@ postgres_replication_lag_alert 0
   ./healthcheck.sh
   ```
 - Grafana alert rule: `postgres_replication_lag_alert == 1`
+
+**Setup Steps:**
+1. Install PostgreSQL Exporter on DB nodes.
+2. Install Node Exporter with textfile collector.
+3. Schedule `healthcheck.sh` via cron.
+4. Start Prometheus with `monitoring/prometheus.yml`.
+5. Start Grafana and import `monitoring/grafana-dashboards.json`.
+
+**Dashboard Features:**
+- PostgreSQL Availability
+- Node Role
+- Replication Lag
+- **Replication Lag Alert**
+- Active Connections
+- CPU / Memory Usage
+- Failover Events
 
 ---
 
@@ -412,6 +424,11 @@ Checks:
 - **Replication lag high:** Check network latency and disk I/O on replicas.
 - **Prometheus not scraping:** Verify `prometheus.yml` targets and firewall rules.
 - **Grafana dashboard empty:** Ensure exporters are running and Prometheus has recent data.
+- **verify.sh VIP mismatch:** Set `VIP_IP` before running:
+  ```bash
+  export VIP_IP="192.168.1.200"
+  ./verify.sh
+  ```
 
 ---
 
