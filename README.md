@@ -7,30 +7,24 @@ This project creates a resilient PostgreSQL cluster with primary and replica nod
 
 ## Default Ubuntu Setup for This Project
 
-To ensure consistent installation and operation of the PostgreSQL HA Cluster, all nodes should start from the same base environment. The following specifications define the default Ubuntu setup for this project:
+To ensure consistent installation and operation of the PostgreSQL HA Cluster, all nodes should start from the same base environment:
 
-- **Operating System:** Ubuntu Server 22.04 LTS (minimal installation is recommended to avoid unnecessary packages and services).
-- **Package Manager:** `apt` (default on Ubuntu).
-- **User Account:** A user account with `sudo` privileges (either the root account or a non-root user in the sudoers group).
-- **Network Configuration:** Each node must have a static IP address configured using `netplan`. The static IP should match the IP plan defined in the project documentation.
-- **SSH Access:** SSH must be enabled and accessible for remote administration.
-- **PostgreSQL Installation:** PostgreSQL is **not pre-installed**. The `setup.sh` script will install PostgreSQL and any required extensions according to the node’s role:
-  - On **master** and **replica** nodes, `setup.sh` will run `apt install postgresql postgresql-contrib` to install PostgreSQL.
-  - The default PostgreSQL version is **15**, which is the version available in the official Ubuntu 22.04 package repositories.
-- **Additional Services:** Pgpool-II, PGHA (Pgpool watchdog + VIP management), Prometheus, and Grafana are **not pre-installed**. These services will be installed automatically by `setup.sh` when running on their respective node roles.
-- **System Updates:** It is recommended to update the system before running any setup scripts:
+- **Operating System:** Ubuntu Server 22.04 LTS (minimal installation recommended)
+- **Package Manager:** `apt`
+- **User Account:** A user account with `sudo` privileges
+- **Network Configuration:** Static IP via `netplan`
+- **SSH Access:** Enabled and accessible
+- **PostgreSQL:** Not pre-installed — installed by `setup.sh` according to node role
+- **Additional Services:** Pgpool-II, PGHA, Prometheus, Grafana — installed by `setup.sh` for their roles
+- **System Updates:**  
   ```bash
   sudo apt update && sudo apt upgrade -y
   ```
-- **Clean Environment:** The installation assumes a clean system without conflicting PostgreSQL or Pgpool installations. Pre-existing installations may interfere with configuration and replication setup.
-
-> **Note:** Starting from a minimal, clean Ubuntu Server 22.04 LTS environment ensures that the `setup.sh` script can configure each node consistently and without conflicts.
+- **Clean Environment:** No conflicting PostgreSQL/Pgpool installations
 
 ---
 
 ## Quick Install from GitHub
-
-You can install each node role by downloading the scripts and configs directly from this repository’s raw URLs.
 
 **Base URL:**
 ```
@@ -44,63 +38,26 @@ sudo mkdir -p /opt/pg-ha && cd /opt/pg-ha
 
 ### 2️⃣ Download core scripts
 ```bash
-wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/setup.sh -O setup.sh
-wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/healthcheck.sh -O healthcheck.sh
-chmod +x setup.sh healthcheck.sh
+wget -q $BASE_URL/setup.sh -O setup.sh
+wget -q $BASE_URL/healthcheck.sh -O healthcheck.sh
+wget -q $BASE_URL/verify.sh -O verify.sh
+chmod +x setup.sh healthcheck.sh verify.sh
 ```
 
 ### 3️⃣ Download configs
 ```bash
 mkdir -p configs monitoring
-
-# Configs
-wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/configs/postgresql.conf -O configs/postgresql.conf
-wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/configs/pg_hba.conf -O configs/pg_hba.conf
-wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/configs/network-setup.yaml -O configs/network-setup.yaml
-wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/configs/pgpool.conf -O configs/pgpool.conf
-wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/configs/pgpool-healthcheck.conf -O configs/pgpool-healthcheck.conf
-wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/configs/watchdog.conf -O configs/watchdog.conf
-
-# Monitoring
-wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/monitoring/prometheus.yml -O monitoring/prometheus.yml
-wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/monitoring/postgres_exporter_setup.sh -O monitoring/postgres_exporter_setup.sh
-wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/monitoring/queries.yaml -O monitoring/queries.yaml
-wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/monitoring/grafana-dashboards.json -O monitoring/grafana-dashboards.json
+wget -q $BASE_URL/configs/postgresql.conf -O configs/postgresql.conf
+wget -q $BASE_URL/configs/pg_hba.conf -O configs/pg_hba.conf
+wget -q $BASE_URL/configs/network-setup.yaml -O configs/network-setup.yaml
+wget -q $BASE_URL/configs/pgpool.conf -O configs/pgpool.conf
+wget -q $BASE_URL/configs/pgpool-healthcheck.conf -O configs/pgpool-healthcheck.conf
+wget -q $BASE_URL/configs/watchdog.conf -O configs/watchdog.conf
+wget -q $BASE_URL/monitoring/prometheus.yml -O monitoring/prometheus.yml
+wget -q $BASE_URL/monitoring/postgres_exporter_setup.sh -O monitoring/postgres_exporter_setup.sh
+wget -q $BASE_URL/monitoring/queries.yaml -O monitoring/queries.yaml
+wget -q $BASE_URL/monitoring/grafana-dashboards.json -O monitoring/grafana-dashboards.json
 chmod +x monitoring/postgres_exporter_setup.sh
-```
-
-### 4️⃣ Run setup by role
-
-Replace `<MASTER_IP>` with your primary node’s IP.
-
-- **Master node:**
-```bash
-./setup.sh master
-```
-
-- **Replica node:**
-```bash
-./setup.sh replica <MASTER_IP>
-```
-
-- **Pgpool node:**
-```bash
-./setup.sh pgpool
-```
-
-- **PGHA node:**
-```bash
-./setup.sh pgha
-```
-
-- **Monitoring node:**
-```bash
-./setup.sh monitoring
-```
-
-### 5️⃣ Enable healthcheck on DB nodes
-```bash
-(crontab -l 2>/dev/null; echo "* * * * * /opt/pg-ha/healthcheck.sh") | crontab -
 ```
 
 ---
@@ -130,168 +87,74 @@ postgres-ha-cluster-vm/
 └── .gitignore
 ```
 
-## Cluster Node Layout
-
-```text
-6 Virtual Machines — each with a dedicated role:
-
-1. pg-master         → Primary PostgreSQL node (handles writes)
-2. pg-replica1       → Standby node (streaming replication)
-3. pg-replica2       → Additional standby node for failover
-4. pgpool-node       → Connection manager (load balancing + healthcheck)
-5. pgha-node         → HA controller (Pgpool watchdog + VIP management)
-6. monitoring-node   → Prometheus + Grafana dashboard
-```
-
-> Pgpool and PGHA are intentionally separated for better fault isolation and observability.
-
 ---
 
-## Monitoring & Dashboard
-
-This project includes Prometheus + Grafana integration for real-time cluster monitoring, with `healthcheck.sh` integrated into Node Exporter’s textfile collector for unified metrics.
-
-Example metrics from `healthcheck.sh`:
-```
-# HELP postgres_up PostgreSQL availability (1=up, 0=down)
-# TYPE postgres_up gauge
-postgres_up 1
-
-# HELP postgres_in_recovery Node role (1=replica, 0=primary)
-# TYPE postgres_in_recovery gauge
-postgres_in_recovery 0
-
-# HELP postgres_replication_lag_seconds Replication lag in seconds
-# TYPE postgres_replication_lag_seconds gauge
-postgres_replication_lag_seconds 0
-```
-
----
-
-## Installation Guide
 ## Installation Guide
 
 ### Prerequisites
-- 6 Virtual Machines (Ubuntu Server 22.04 LTS recommended)
-- Static IP for each VM (configured via `netplan`)
-- SSH access to each node
-- Sudo privileges on each node
-- Clean environment (no pre-installed PostgreSQL, Pgpool, Prometheus, or Grafana)
-
----
+- 6 VMs (Ubuntu Server 22.04 LTS)
+- Static IPs
+- SSH access
+- Sudo privileges
 
 ### Node Roles & IP Plan
-| Node Name         | Role                          | Example IP     |
-|-------------------|-------------------------------|----------------|
-| pg-master         | Primary PostgreSQL node       | 10.0.2.101     |
-| pg-replica1       | Standby node                  | 10.0.2.102     |
-| pg-replica2       | Standby node                  | 10.0.2.103     |
-| pgpool-node       | Connection manager            | 10.0.2.104     |
-| pgha-node         | HA controller (watchdog)      | 10.0.2.105     |
-| monitoring-node   | Prometheus + Grafana dashboard| 10.0.2.106     |
+| Node Name       | Role                          | Example IP     |
+|-----------------|-------------------------------|----------------|
+| pg-master       | Primary PostgreSQL node       | 10.0.2.101     |
+| pg-replica1     | Standby node                  | 10.0.2.102     |
+| pg-replica2     | Standby node                  | 10.0.2.103     |
+| pgpool-node     | Connection manager            | 10.0.2.104     |
+| pgha-node       | HA controller (watchdog)      | 10.0.2.105     |
+| monitoring-node | Prometheus + Grafana dashboard| 10.0.2.106     |
 
 ---
 
 ### Installation Order
 
-#### 1️⃣ Configure Network (All Nodes)
+1️⃣ **Network Configuration** (all nodes)  
 ```bash
 sudo cp configs/network-setup.yaml /etc/netplan/00-installer-config.yaml
 sudo netplan apply
 ```
-> ⚠️ **Warning:** Do not run `ip addr flush` on a VM accessed via SSH — it will drop your connection.
 
----
-
-#### 2️⃣ Master Node Setup
-On `pg-master`:
+2️⃣ **Master Node**  
 ```bash
+export MASTER_IP="10.0.2.101"
 ./setup.sh master
 ```
-- Installs PostgreSQL
-- Creates `replica` user for streaming replication
-- Applies `postgresql.conf` and `pg_hba.conf`
-- Starts PostgreSQL service
 
----
-
-#### 3️⃣ Replica Nodes Setup
-On each replica node:
+3️⃣ **Replica Nodes**  
 ```bash
-./setup.sh replica 10.0.2.101
+./setup.sh replica $MASTER_IP
 ```
-- Stops PostgreSQL
-- Clears existing data directory
-- Runs `pg_basebackup` from master
-- Configures replication settings
-- Starts PostgreSQL in standby mode
 
----
-
-#### 4️⃣ Pgpool Node Setup
-On `pgpool-node`:
+4️⃣ **Pgpool Node**  
 ```bash
 ./setup.sh pgpool
 ```
-- Installs Pgpool-II
-- Applies `pgpool.conf` and `pgpool-healthcheck.conf`
-- Enables and starts Pgpool service
 
----
-
-#### 5️⃣ PGHA Node Setup
-On `pgha-node`:
+5️⃣ **PGHA Node**  
 ```bash
 ./setup.sh pgha
 ```
-- Installs Pgpool-II with Watchdog
-- Applies `watchdog.conf`
-- Configures Virtual IP (VIP) for failover
-- Enables and starts Pgpool service
 
----
-
-#### 6️⃣ Monitoring Node Setup
-On `monitoring-node`:
+6️⃣ **Monitoring Node**  
 ```bash
 ./setup.sh monitoring
 ```
-- Installs Prometheus and Grafana
-- Applies `prometheus.yml`
-- Installs PostgreSQL Exporter
-- Enables and starts monitoring services
 
----
-
-#### 7️⃣ Enable Healthcheck on DB Nodes
-On each **master** and **replica** node:
+7️⃣ **Healthcheck on DB Nodes**  
 ```bash
 (crontab -l 2>/dev/null; echo "* * * * * /opt/pg-ha/healthcheck.sh") | crontab -
 ```
-- Runs `healthcheck.sh` every minute
-- Outputs metrics to Node Exporter textfile collector
 
----
-
-#### 8️⃣ Import Grafana Dashboard
-- Open Grafana at `http://<monitoring-node-ip>:3000`
-- Login (default: `admin` / `admin`)
+8️⃣ **Grafana Dashboard**  
+- Access Grafana at `http://<monitoring-node-ip>:3000`
 - Import `monitoring/grafana-dashboards.json`
-- Select Prometheus as the data source
 
 ---
 
-### Verification
-- Use `verify.sh` to confirm all services and roles are correct:
-```bash
-wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/verify.sh -O verify.sh
-chmod +x verify.sh
-./verify.sh
-```
-
-
----
-
+## Failover & Recovery Scenarios
 ## Failover & Recovery Scenarios
 
 This section describes how to test and recover from failover events in the PostgreSQL HA Cluster.
@@ -502,52 +365,30 @@ Use this checklist to verify that your PostgreSQL HA Cluster is fully operationa
 
 ## Post-Installation Verification
 
-After completing the installation, you can verify your node’s health using the `verify.sh` script.
-
-### 1️⃣ Download & Run
 ```bash
-wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/verify.sh -O verify.sh
-chmod +x verify.sh
+export VIP_IP="10.0.2.110"   # Change if needed
 ./verify.sh
 ```
-
-### 2️⃣ Setting the VIP IP
-By default, `verify.sh` checks for the VIP `10.0.2.110`.  
-If your environment uses a different VIP, set it before running the script:
-```bash
-export VIP_IP="192.168.1.200"
-./verify.sh
-```
-Or edit the `VIP_IP` variable inside `verify.sh`.
+Checks:
+- PostgreSQL service
+- Node role
+- Replication
+- Pgpool
+- VIP presence
+- Monitoring services
+- Healthcheck metrics
 
 ---
 
-### 3️⃣ What it checks
-- PostgreSQL service status
-- Node role (Primary / Replica)
-- Replication connections (on Primary)
-- Pgpool2 service status
-- VIP presence (for PGHA node, using the configured `VIP_IP`)
-- Prometheus & Grafana services (for monitoring node)
-- Healthcheck `.prom` file presence
+## Troubleshooting
+
+**Common Issues & Fixes:**
+- **VIP not moving:** Check `watchdog.conf` and ensure both Pgpool nodes can ping each other.
+- **Replication lag high:** Check network latency and disk I/O on replicas.
+- **Prometheus not scraping:** Verify `prometheus.yml` targets and firewall rules.
+- **Grafana dashboard empty:** Ensure exporters are running and Prometheus has recent data.
 
 ---
-
-### 4️⃣ Example output
-```
-=== PostgreSQL HA Cluster Verification ===
-[PASS] PostgreSQL service is running
-[PASS] Node role detected: PRIMARY
-[PASS] Replication connections: 2
-[PASS] Pgpool2 service is running
-[INFO] VIP (192.168.1.200) not found on this node (may be standby)
-[PASS] Prometheus service is running
-[PASS] Grafana service is running
-[PASS] Healthcheck metrics file found
-=== Verification complete ===
-```
-
-✅ If all critical checks pass, your node is healthy and ready for production.
 
 ## License & Sharing
 
