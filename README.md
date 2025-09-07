@@ -38,25 +38,25 @@ sudo mkdir -p /opt/pg-ha && cd /opt/pg-ha
 
 ### 2️⃣ Download core scripts
 ```bash
-wget -q $BASE_URL/setup.sh -O setup.sh
-wget -q $BASE_URL/healthcheck.sh -O healthcheck.sh
-wget -q $BASE_URL/verify.sh -O verify.sh
+wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/setup.sh -O setup.sh
+wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/healthcheck.sh -O healthcheck.sh
+wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/verify.sh -O verify.sh
 chmod +x setup.sh healthcheck.sh verify.sh
 ```
 
 ### 3️⃣ Download configs
 ```bash
 mkdir -p configs monitoring
-wget -q $BASE_URL/configs/postgresql.conf -O configs/postgresql.conf
-wget -q $BASE_URL/configs/pg_hba.conf -O configs/pg_hba.conf
-wget -q $BASE_URL/configs/network-setup.yaml -O configs/network-setup.yaml
-wget -q $BASE_URL/configs/pgpool.conf -O configs/pgpool.conf
-wget -q $BASE_URL/configs/pgpool-healthcheck.conf -O configs/pgpool-healthcheck.conf
-wget -q $BASE_URL/configs/watchdog.conf -O configs/watchdog.conf
-wget -q $BASE_URL/monitoring/prometheus.yml -O monitoring/prometheus.yml
-wget -q $BASE_URL/monitoring/postgres_exporter_setup.sh -O monitoring/postgres_exporter_setup.sh
-wget -q $BASE_URL/monitoring/queries.yaml -O monitoring/queries.yaml
-wget -q $BASE_URL/monitoring/grafana-dashboards.json -O monitoring/grafana-dashboards.json
+wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/configs/postgresql.conf -O configs/postgresql.conf
+wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/configs/pg_hba.conf -O configs/pg_hba.conf
+wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/configs/network-setup.yaml -O configs/network-setup.yaml
+wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/configs/pgpool.conf -O configs/pgpool.conf
+wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/configs/pgpool-healthcheck.conf -O configs/pgpool-healthcheck.conf
+wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/configs/watchdog.conf -O configs/watchdog.conf
+wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/monitoring/prometheus.yml -O monitoring/prometheus.yml
+wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/monitoring/postgres_exporter_setup.sh -O monitoring/postgres_exporter_setup.sh
+wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/monitoring/queries.yaml -O monitoring/queries.yaml
+wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/monitoring/grafana-dashboards.json -O monitoring/grafana-dashboards.json
 chmod +x monitoring/postgres_exporter_setup.sh
 ```
 
@@ -154,12 +154,37 @@ export MASTER_IP="10.0.2.101"
 
 ---
 
-## Failover & Recovery Scenarios
+## Monitoring & Dashboard
+
+This project includes Prometheus + Grafana integration for real-time cluster monitoring, with `healthcheck.sh` integrated into Node Exporter’s textfile collector for unified metrics.
+
+The improved `healthcheck.sh` now includes a **replication lag threshold** feature, generating an additional alert metric when lag exceeds a configurable limit.
+
+Example metrics:
+```
+# HELP postgres_up PostgreSQL availability (1=up, 0=down)
+postgres_up 1
+# HELP postgres_in_recovery Node role (1=replica, 0=primary)
+postgres_in_recovery 0
+# HELP postgres_replication_lag_seconds Replication lag in seconds
+postgres_replication_lag_seconds 0
+# HELP postgres_replication_lag_alert Replication lag alert (1=above threshold, 0=ok)
+postgres_replication_lag_alert 0
+```
+
+- Default threshold: **5 seconds**  
+- Change threshold:
+  ```bash
+  export LAG_THRESHOLD=10
+  ./healthcheck.sh
+  ```
+- Grafana alert rule: `postgres_replication_lag_alert == 1`
+
+---
+
 ## Failover & Recovery Scenarios
 
 This section describes how to test and recover from failover events in the PostgreSQL HA Cluster.
-
----
 
 ### 1️⃣ Planned Failover (Maintenance)
 
