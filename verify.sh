@@ -7,7 +7,7 @@ PGPORT="5432"
 PGHOST="localhost"
 NODE_EXPORTER_TEXTFILE="/var/lib/node_exporter/textfile_collector"
 
-# Set your VIP here (example: 10.0.2.110)
+# Set your VIP here or via environment variable
 VIP_IP="${VIP_IP:-10.0.2.110}"
 
 pass() { echo -e "[\e[32mPASS\e[0m] $1"; }
