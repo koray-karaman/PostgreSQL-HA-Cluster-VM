@@ -7,6 +7,9 @@ PGPORT="5432"
 PGHOST="localhost"
 NODE_EXPORTER_TEXTFILE="/var/lib/node_exporter/textfile_collector"
 
+# Set your VIP here (example: 10.0.2.110)
+VIP_IP="${VIP_IP:-10.0.2.110}"
+
 pass() { echo -e "[\e[32mPASS\e[0m] $1"; }
 fail() { echo -e "[\e[31mFAIL\e[0m] $1"; }
 
@@ -47,10 +50,10 @@ if systemctl list-units --type=service | grep -q pgpool2; then
 fi
 
 # 5. VIP check (if PGHA node)
-if ip addr | grep -q "10.0.2.110"; then
-    pass "VIP is assigned to this node"
+if ip addr | grep -q "$VIP_IP"; then
+    pass "VIP ($VIP_IP) is assigned to this node"
 else
-    echo "[INFO] VIP not found on this node (may be standby)"
+    echo "[INFO] VIP ($VIP_IP) not found on this node (may be standby)"
 fi
 
 # 6. Monitoring services (if monitoring node)

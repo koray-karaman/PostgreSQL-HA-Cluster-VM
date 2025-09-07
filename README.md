@@ -293,7 +293,6 @@ chmod +x verify.sh
 ---
 
 ## Failover & Recovery Scenarios
-## Failover & Recovery Scenarios
 
 This section describes how to test and recover from failover events in the PostgreSQL HA Cluster.
 
@@ -411,7 +410,6 @@ This section describes how to test and recover from failover events in the Postg
 ---
 
 ## Post-Installation Verification Checklist
-## Post-Installation Verification Checklist
 
 Use this checklist to verify that your PostgreSQL HA Cluster is fully operational after installation.
 
@@ -513,27 +511,84 @@ chmod +x verify.sh
 ./verify.sh
 ```
 
-### 2️⃣ What it checks
+### 2️⃣ Setting the VIP IP
+By default, `verify.sh` checks for the VIP `10.0.2.110`.  
+If your environment uses a different VIP, set it before running the script:
+```bash
+export VIP_IP="192.168.1.200"
+./verify.sh
+```
+Or edit the `VIP_IP` variable inside `verify.sh`.
+
+---
+
+### 3️⃣ What it checks
 - PostgreSQL service status
 - Node role (Primary / Replica)
 - Replication connections (on Primary)
 - Pgpool2 service status
-- VIP presence (for PGHA node)
+- VIP presence (for PGHA node, using the configured `VIP_IP`)
 - Prometheus & Grafana services (for monitoring node)
 - Healthcheck `.prom` file presence
 
-### 3️⃣ Example output
+---
+
+### 4️⃣ Example output
 ```
 === PostgreSQL HA Cluster Verification ===
 [PASS] PostgreSQL service is running
 [PASS] Node role detected: PRIMARY
 [PASS] Replication connections: 2
 [PASS] Pgpool2 service is running
-[INFO] VIP not found on this node (may be standby)
+[INFO] VIP (192.168.1.200) not found on this node (may be standby)
 [PASS] Prometheus service is running
 [PASS] Grafana service is running
 [PASS] Healthcheck metrics file found
 === Verification complete ===
 ```
 
-✅ If all critical checks pass, your node is healthy and ready for production
+✅ If all critical checks pass, your node is healthy and ready for production.
+
+## License & Sharing
+
+### License
+This project is licensed under the **MIT License**.
+
+```
+MIT License
+
+Copyright (c) 2025 Koray Karaman
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+---
+
+### Sharing & Contribution
+- You are free to **fork** this repository and adapt it to your needs.
+- Contributions via **pull requests** are welcome — please ensure your changes are well-documented and tested.
+- If you share this project publicly, please include a link back to the original repository:
+  ```
+  https://github.com/koray-karaman/PostgreSQL-HA-Cluster-VM
+  ```
+- For bug reports or feature requests, open an **issue** in the repository.
+
+---
+
+**Built by [Koray Karaman](https://github.com/koray-karaman) — for clarity, control, and community.**
