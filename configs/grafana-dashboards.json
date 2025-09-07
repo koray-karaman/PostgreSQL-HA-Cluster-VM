@@ -1,0 +1,50 @@
+{
+  "title": "PostgreSQL HA Cluster Dashboard",
+  "timezone": "browser",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "PostgreSQL Availability",
+      "targets": [
+        { "expr": "postgres_up", "legendFormat": "Up Status" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Node Role (0=Primary, 1=Replica)",
+      "targets": [
+        { "expr": "postgres_in_recovery", "legendFormat": "Role" }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Replication Lag (seconds)",
+      "targets": [
+        { "expr": "postgres_replication_lag_seconds", "legendFormat": "{{instance}}" }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Active Connections",
+      "targets": [
+        { "expr": "pg_stat_activity_count", "legendFormat": "{{instance}}" }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "CPU Usage (%)",
+      "targets": [
+        { "expr": "100 - (avg by(instance) (irate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)", "legendFormat": "{{instance}}" }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Memory Usage (%)",
+      "targets": [
+        { "expr": "(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100", "legendFormat": "{{instance}}" }
+      ]
+    }
+  ],
+  "schemaVersion": 27,
+  "version": 1
+}

@@ -1,0 +1,13 @@
+pg_isready_status:
+  query: "SELECT CASE WHEN pg_is_in_recovery() THEN 1 ELSE 0 END AS in_recovery;"
+  metrics:
+    - in_recovery:
+        usage: "GAUGE"
+        description: "1 if in recovery (replica), 0 if primary"
+
+replication_lag_seconds:
+  query: "SELECT EXTRACT(EPOCH FROM now() - pg_last_xact_replay_timestamp())::INT AS lag;"
+  metrics:
+    - lag:
+        usage: "GAUGE"
+        description: "Replication lag in seconds"
