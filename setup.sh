@@ -46,6 +46,8 @@ apply_config_files() {
   # Güvenli data_directory ekleme
   sudo sed -i '/^data_directory\s*=.*/d' "$conf_dir/postgresql.conf"
   echo -e "\n# Explicit data directory for HA setup\ndata_directory = '$DATA_DIR'" | sudo tee -a "$conf_dir/postgresql.conf" > /dev/null
+  # Ensure IPv6 localhost is allowed
+  sudo grep -q "::1/128" "$conf_dir/pg_hba.conf" || echo "host    all    all    ::1/128    scram-sha-256" | sudo tee -a "$conf_dir/pg_hba.conf" > /dev/null
 
   sudo systemctl restart postgresql@$PG_VERSION-main
   echo "[+] Configuration applied."
@@ -85,12 +87,13 @@ create_replication_user() {
 
 verify_connection() {
   echo "[*] Verifying connection..."
-  PGPASSWORD="$POSTGRES_PW" psql -U postgres -h localhost -p 5432 -c "SELECT current_user, inet_server_addr();" || {
+  PGPASSWORD="$POSTGRES_PW" psql -U postgres -h 127.0.0.1 -p 5432 -c "SELECT current_user, inet_server_addr();" || {
     echo "[!] Connection failed."
     exit 1
   }
   echo "[+] Connection verified."
 }
+
 
 setup_master() {
   echo "=== Setting up master node ==="
