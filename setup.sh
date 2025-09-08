@@ -4,11 +4,13 @@ MASTER_IP="$2"
 PGHA_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONFIG_DIR="$PGHA_DIR/configs"
 PG_VERSION=""
+DATA_DIR=""
 
 detect_pg_version() {
   local version
   version=$(psql -V | awk '{print $3}' | cut -d. -f1)
   PG_VERSION="$version"
+  DATA_DIR="/var/lib/postgresql/$PG_VERSION/main"
 }
 
 ensure_postgres_user() {
@@ -29,7 +31,7 @@ clean_broken_cluster() {
   echo "[*] Cleaning broken cluster if exists..."
   sudo pg_dropcluster $PG_VERSION main --stop 2>/dev/null || true
   sudo rm -rf /etc/postgresql/$PG_VERSION/main
-  sudo rm -rf /var/lib/postgresql/$PG_VERSION/main
+  sudo rm -rf "$DATA_DIR"
 }
 
 ensure_cluster_exists() {
@@ -40,8 +42,19 @@ ensure_cluster_exists() {
 apply_config_files() {
   echo "[*] Applying PostgreSQL configuration..."
   local conf_dir="/etc/postgresql/$PG_VERSION/main"
+
+  # Yedekle
+  sudo cp "$conf_dir/postgresql.conf" "$conf_dir/postgresql.conf.bak"
+
+  # Uygula
   sudo cp "$CONFIG_DIR/postgresql.conf" "$conf_dir/postgresql.conf"
   sudo cp "$CONFIG_DIR/pg_hba.conf" "$conf_dir/pg_hba.conf"
+
+  # data_directory tanımını ekle
+  sudo sed -i "/^#*data_directory\s*=.*/d" "$conf_dir/postgresql.conf"
+  echo "data_directory = '$DATA_DIR'" | sudo tee -a "$conf_dir/postgresql.conf" > /dev/null
+
+  # Restart
   sudo systemctl restart postgresql@$PG_VERSION-main
   echo "[+] Configuration applied to PostgreSQL $PG_VERSION"
 }
@@ -122,13 +135,12 @@ setup_replica() {
   clean_broken_cluster
   ensure_cluster_exists
 
-  local data_dir="/var/lib/postgresql/$PG_VERSION/main"
   echo "[*] Stopping PostgreSQL and cleaning data directory..."
   sudo systemctl stop postgresql@$PG_VERSION-main
-  sudo -u postgres rm -rf "$data_dir"
+  sudo -u postgres rm -rf "$DATA_DIR"
 
   echo "[*] Performing base backup from master..."
-  sudo -u postgres pg_basebackup -h "$MASTER_IP" -D "$data_dir" -U replicator -P -R
+  sudo -u postgres pg_basebackup -h "$MASTER_IP" -D "$DATA_DIR" -U replicator -P -R
 
   apply_config_files
   fix_pg_hba_auth
