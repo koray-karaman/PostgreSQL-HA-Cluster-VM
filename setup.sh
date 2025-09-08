@@ -26,15 +26,15 @@ prompt_postgres_password() {
 }
 
 clean_broken_cluster() {
+  echo "[*] Cleaning broken cluster if exists..."
+  sudo pg_dropcluster $PG_VERSION main --stop 2>/dev/null || true
   sudo rm -rf /etc/postgresql/$PG_VERSION/main
   sudo rm -rf /var/lib/postgresql/$PG_VERSION/main
 }
 
 ensure_cluster_exists() {
-  if ! pg_lsclusters | grep -q "$PG_VERSION"; then
-    echo "[*] Creating PostgreSQL $PG_VERSION cluster..."
-    sudo pg_createcluster "$PG_VERSION" main --start
-  fi
+  echo "[*] Creating PostgreSQL $PG_VERSION cluster..."
+  sudo pg_createcluster "$PG_VERSION" main --start
 }
 
 apply_config_files() {
@@ -42,7 +42,7 @@ apply_config_files() {
   local conf_dir="/etc/postgresql/$PG_VERSION/main"
   sudo cp "$CONFIG_DIR/postgresql.conf" "$conf_dir/postgresql.conf"
   sudo cp "$CONFIG_DIR/pg_hba.conf" "$conf_dir/pg_hba.conf"
-  sudo systemctl restart postgresql
+  sudo systemctl restart postgresql@$PG_VERSION-main
   echo "[+] Configuration applied to PostgreSQL $PG_VERSION"
 }
 
@@ -50,7 +50,7 @@ fix_pg_hba_auth() {
   local hba="/etc/postgresql/$PG_VERSION/main/pg_hba.conf"
   echo "[*] Switching peer auth to md5 for postgres user..."
   sudo sed -i 's/^local\s\+all\s\+postgres\s\+peer/local all postgres md5/' "$hba"
-  sudo systemctl restart postgresql
+  sudo systemctl restart postgresql@$PG_VERSION-main
 }
 
 wait_for_postgres() {
@@ -124,7 +124,7 @@ setup_replica() {
 
   local data_dir="/var/lib/postgresql/$PG_VERSION/main"
   echo "[*] Stopping PostgreSQL and cleaning data directory..."
-  sudo systemctl stop postgresql
+  sudo systemctl stop postgresql@$PG_VERSION-main
   sudo -u postgres rm -rf "$data_dir"
 
   echo "[*] Performing base backup from master..."
