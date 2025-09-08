@@ -1,8 +1,9 @@
 #!/bin/bash
-# PostgreSQL HA Cluster Setup Script (Full version)
+# PostgreSQL HA Cluster Setup Script (Full Version)
 # Author: Koray Karaman
 
 ROLE="$1"
+MASTER_IP="$2"
 PGHA_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONFIG_DIR="$PGHA_DIR/configs"
 
@@ -112,6 +113,7 @@ setup_replica() {
 
   ensure_postgres_user
   prompt_postgres_password
+  clean_broken_cluster
   ensure_cluster_exists
 
   PG_VERSION=$(detect_pg_version)
