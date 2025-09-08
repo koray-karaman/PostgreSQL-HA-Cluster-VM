@@ -140,15 +140,36 @@ It dynamically detects the installed PostgreSQL version and applies the correct 
 
 Navigate to your working directory (e.g. `/opt/pg-ha` or `~/pg-ha`) and run:
 
+#### 🔄 Quick Bootstrap Setup
+
+To prepare your environment with all required files, simply run:
+
 ```bash
-chmod +x setup.sh
-./setup.sh <role> [master_ip]
+wget https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/bootstrap.sh -O bootstrap.sh
+chmod +x bootstrap.sh
+./bootstrap.sh
 ```
 
-- `<role>` is one of: `master`, `replica`, `pgpool`, `pgha`, `monitoring`
-- `[master_ip]` is required only for `replica` nodes
+This will automatically:
+- Create the working directory `~/pg-ha`
+- Download `setup.sh` for role-based installation
+- Download required config files: `postgresql.conf`, `pg_hba.conf`, `network-setup.yaml`
+- Download helper scripts: `healthcheck.sh`, `verify.sh`
+- Set executable permissions
 
----
+Once complete, you can begin installation with:
+
+```bash
+cd ~/pg-ha
+./setup.sh master
+```
+
+Or for a replica node:
+
+```bash
+./setup.sh replica <MASTER_IP>
+```
+
 
 ##### 🧠 Examples
 
