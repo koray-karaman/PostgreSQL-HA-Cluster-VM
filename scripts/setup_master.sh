@@ -103,13 +103,18 @@ wait_for_postgres() {
 # Set password for postgres user
 set_postgres_password() {
   echo "[*] Setting password for postgres..."
-  sudo -u postgres /usr/lib/postgresql/$PG_VERSION/bin/psql -p 5432 -c "ALTER USER postgres WITH PASSWORD '$POSTGRES_PW';"
+  sudo -u postgres psql -p 5432 <<EOF
+SET synchronous_commit = off;
+ALTER USER postgres WITH PASSWORD '$POSTGRES_PW';
+EOF
 }
+
 
 # Create or update replication user
 create_replication_user() {
   echo "[*] Creating or updating replication user..."
   sudo -u postgres psql -p 5432 <<EOF
+SET synchronous_commit = off;
 DO \$\$
 BEGIN
    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'replicator') THEN
@@ -121,6 +126,7 @@ END
 \$\$;
 EOF
 }
+
 
 # Verify local connection
 verify_connection() {
