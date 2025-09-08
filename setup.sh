@@ -7,10 +7,7 @@ PG_VERSION=""
 
 detect_pg_version() {
   local version
-  version=$(pg_lsclusters | awk 'NR==2 {print $1}')
-  if [ -z "$version" ]; then
-    version=$(psql -V | awk '{print $3}' | cut -d. -f1)
-  fi
+  version=$(psql -V | awk '{print $3}' | cut -d. -f1)
   PG_VERSION="$version"
 }
 
@@ -29,22 +26,11 @@ prompt_postgres_password() {
 }
 
 clean_broken_cluster() {
-  if pg_lsclusters 2>&1 | grep -q "Invalid data directory"; then
-    echo "[!] Detected broken cluster. Cleaning manually..."
-    sudo rm -rf /etc/postgresql/14/main
-    sudo rm -rf /var/lib/postgresql/14/main
-  fi
+  sudo rm -rf /etc/postgresql/$PG_VERSION/main
+  sudo rm -rf /var/lib/postgresql/$PG_VERSION/main
 }
 
 ensure_cluster_exists() {
-  local conf_dir="/etc/postgresql/$PG_VERSION/main"
-  local data_dir="/var/lib/postgresql/$PG_VERSION/main"
-
-  if [ -d "$conf_dir" ] && [ ! -d "$data_dir" ]; then
-    echo "[!] Config exists but data directory missing. Cleaning up..."
-    sudo rm -rf "$conf_dir"
-  fi
-
   if ! pg_lsclusters | grep -q "$PG_VERSION"; then
     echo "[*] Creating PostgreSQL $PG_VERSION cluster..."
     sudo pg_createcluster "$PG_VERSION" main --start
@@ -69,12 +55,12 @@ fix_pg_hba_auth() {
 
 set_postgres_password() {
   echo "[*] Setting password for postgres user..."
-  sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD '$POSTGRES_PW';"
+  sudo -u postgres /usr/lib/postgresql/$PG_VERSION/bin/psql -p 5432 -c "ALTER USER postgres WITH PASSWORD '$POSTGRES_PW';"
 }
 
 create_replication_user() {
   echo "[*] Creating replication user..."
-  sudo -u postgres psql -c "CREATE ROLE replicator WITH REPLICATION LOGIN ENCRYPTED PASSWORD 'replicator';"
+  sudo -u postgres /usr/lib/postgresql/$PG_VERSION/bin/psql -p 5432 -c "CREATE ROLE replicator WITH REPLICATION LOGIN ENCRYPTED PASSWORD 'replicator';"
 }
 
 setup_master() {
