@@ -12,7 +12,6 @@ detect_pg_version() {
   version=$(pg_lsclusters | awk 'NR==2 {print $1}')
   if [ -z "$version" ]; then
     version=$(psql -V | awk '{print $3}' | cut -d. -f1)
-    echo "[*] Fallback: Detected PostgreSQL version as $version"
   fi
   echo "$version"
 }
@@ -51,7 +50,7 @@ ensure_cluster_exists() {
   fi
 
   if ! pg_lsclusters | grep -q "$PG_VERSION"; then
-    echo "[*] No cluster found. Creating PostgreSQL $PG_VERSION cluster..."
+    echo "[*] Creating PostgreSQL $PG_VERSION cluster..."
     sudo pg_createcluster "$PG_VERSION" main --start
   fi
 }
