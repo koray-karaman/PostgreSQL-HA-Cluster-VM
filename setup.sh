@@ -53,6 +53,20 @@ fix_pg_hba_auth() {
   sudo systemctl restart postgresql
 }
 
+wait_for_postgres() {
+  echo "[*] Waiting for PostgreSQL to become available..."
+  for i in {1..10}; do
+    if sudo -u postgres /usr/lib/postgresql/$PG_VERSION/bin/psql -p 5432 -c "SELECT 1;" &>/dev/null; then
+      echo "[+] PostgreSQL is ready."
+      return
+    else
+      sleep 1
+    fi
+  done
+  echo "[!] PostgreSQL did not become ready in time. Aborting."
+  exit 1
+}
+
 set_postgres_password() {
   echo "[*] Setting password for postgres user..."
   sudo -u postgres /usr/lib/postgresql/$PG_VERSION/bin/psql -p 5432 -c "ALTER USER postgres WITH PASSWORD '$POSTGRES_PW';"
@@ -61,6 +75,15 @@ set_postgres_password() {
 create_replication_user() {
   echo "[*] Creating replication user..."
   sudo -u postgres /usr/lib/postgresql/$PG_VERSION/bin/psql -p 5432 -c "CREATE ROLE replicator WITH REPLICATION LOGIN ENCRYPTED PASSWORD 'replicator';"
+}
+
+verify_connection() {
+  echo "[*] Verifying connection as 'postgres'..."
+  PGPASSWORD="$POSTGRES_PW" psql -U postgres -h localhost -p 5432 -c "SELECT current_user, inet_server_addr();" || {
+    echo "[!] Connection verification failed."
+    exit 1
+  }
+  echo "[+] Connection verified successfully."
 }
 
 setup_master() {
@@ -74,8 +97,10 @@ setup_master() {
   ensure_cluster_exists
   apply_config_files
   fix_pg_hba_auth
+  wait_for_postgres
   set_postgres_password
   create_replication_user
+  verify_connection
 
   echo "[+] Master node setup complete."
   echo "=== master setup finished ==="
@@ -106,7 +131,9 @@ setup_replica() {
 
   apply_config_files
   fix_pg_hba_auth
+  wait_for_postgres
   set_postgres_password
+  verify_connection
 
   echo "[+] Replica node setup complete."
   echo "=== replica setup finished ==="
