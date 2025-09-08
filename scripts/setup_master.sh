@@ -139,20 +139,22 @@ verify_connection() {
 }
 
 # Disable synchronous commit temporarily
-disable_sync_commit() {
+disable_sync_replication() {
   local conf="/etc/postgresql/$PG_VERSION/main/postgresql.conf"
-  echo "[*] Temporarily disabling synchronous_commit..."
-  sudo sed -i "s/^synchronous_commit.*/synchronous_commit = off/" "$conf" || echo "synchronous_commit = off" | sudo tee -a "$conf" > /dev/null
+  echo "[*] Temporarily disabling synchronous replication..."
+  sudo sed -i "s/^synchronous_standby_names.*/synchronous_standby_names = ''/" "$conf" || echo "synchronous_standby_names = ''" | sudo tee -a "$conf" > /dev/null
   sudo systemctl restart postgresql@$PG_VERSION-main
 }
 
+
 # Restore synchronous commit after setup
-restore_sync_commit() {
+restore_sync_replication() {
   local conf="/etc/postgresql/$PG_VERSION/main/postgresql.conf"
-  echo "[*] Restoring synchronous_commit setting..."
-  sudo sed -i "s/^synchronous_commit.*/synchronous_commit = on/" "$conf"
+  echo "[*] Restoring synchronous replication setting..."
+  sudo sed -i "s/^synchronous_standby_names.*/synchronous_standby_names = 'FIRST 1 (pg_replica1, pg_replica2)'/" "$conf"
   sudo systemctl restart postgresql@$PG_VERSION-main
 }
+
 
 
 # Main setup function
@@ -170,12 +172,12 @@ setup_master() {
   fix_pg_hba_auth
   wait_for_postgres
 
-  disable_sync_commit
+  disable_sync_replication
 
   set_postgres_password
   create_replication_user
 
-  restore_sync_commit
+  restore_sync_replication
 
   verify_connection
 
