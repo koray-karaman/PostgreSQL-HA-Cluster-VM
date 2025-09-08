@@ -55,11 +55,12 @@ fix_pg_hba_auth() {
 
 wait_for_postgres() {
   echo "[*] Waiting for PostgreSQL to become available..."
-  for i in {1..10}; do
+  for i in {1..30}; do
     if sudo -u postgres /usr/lib/postgresql/$PG_VERSION/bin/psql -p 5432 -c "SELECT 1;" &>/dev/null; then
-      echo "[+] PostgreSQL is ready."
+      echo "[+] PostgreSQL is ready after $i seconds."
       return
     else
+      echo "  ... still waiting ($i)"
       sleep 1
     fi
   done
