@@ -1,11 +1,9 @@
 #!/bin/bash
-# PostgreSQL HA Cluster Setup Script (Full Version)
-# Author: Koray Karaman
-
 ROLE="$1"
 MASTER_IP="$2"
 PGHA_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONFIG_DIR="$PGHA_DIR/configs"
+PG_VERSION=""
 
 detect_pg_version() {
   local version
@@ -13,7 +11,7 @@ detect_pg_version() {
   if [ -z "$version" ]; then
     version=$(psql -V | awk '{print $3}' | cut -d. -f1)
   fi
-  echo "$version"
+  PG_VERSION="$version"
 }
 
 ensure_postgres_user() {
@@ -39,14 +37,12 @@ clean_broken_cluster() {
 }
 
 ensure_cluster_exists() {
-  PG_VERSION=$(detect_pg_version)
+  local conf_dir="/etc/postgresql/$PG_VERSION/main"
+  local data_dir="/var/lib/postgresql/$PG_VERSION/main"
 
-  PG_CONF_DIR="/etc/postgresql/$PG_VERSION/main"
-  PG_DATA_DIR="/var/lib/postgresql/$PG_VERSION/main"
-
-  if [ -d "$PG_CONF_DIR" ] && [ ! -d "$PG_DATA_DIR" ]; then
+  if [ -d "$conf_dir" ] && [ ! -d "$data_dir" ]; then
     echo "[!] Config exists but data directory missing. Cleaning up..."
-    sudo rm -rf "$PG_CONF_DIR"
+    sudo rm -rf "$conf_dir"
   fi
 
   if ! pg_lsclusters | grep -q "$PG_VERSION"; then
@@ -57,20 +53,17 @@ ensure_cluster_exists() {
 
 apply_config_files() {
   echo "[*] Applying PostgreSQL configuration..."
-  PG_VERSION=$(detect_pg_version)
-  PG_CONF_DIR="/etc/postgresql/$PG_VERSION/main"
-
-  sudo cp "$CONFIG_DIR/postgresql.conf" "$PG_CONF_DIR/postgresql.conf"
-  sudo cp "$CONFIG_DIR/pg_hba.conf" "$PG_CONF_DIR/pg_hba.conf"
+  local conf_dir="/etc/postgresql/$PG_VERSION/main"
+  sudo cp "$CONFIG_DIR/postgresql.conf" "$conf_dir/postgresql.conf"
+  sudo cp "$CONFIG_DIR/pg_hba.conf" "$conf_dir/pg_hba.conf"
   sudo systemctl restart postgresql
   echo "[+] Configuration applied to PostgreSQL $PG_VERSION"
 }
 
 fix_pg_hba_auth() {
-  PG_VERSION=$(detect_pg_version)
-  PG_HBA="/etc/postgresql/$PG_VERSION/main/pg_hba.conf"
+  local hba="/etc/postgresql/$PG_VERSION/main/pg_hba.conf"
   echo "[*] Switching peer auth to md5 for postgres user..."
-  sudo sed -i 's/^local\s\+all\s\+postgres\s\+peer/local all postgres md5/' "$PG_HBA"
+  sudo sed -i 's/^local\s\+all\s\+postgres\s\+peer/local all postgres md5/' "$hba"
   sudo systemctl restart postgresql
 }
 
@@ -88,6 +81,7 @@ setup_master() {
   echo "=== Starting setup for role: master ==="
   sudo apt update && sudo apt install -y postgresql postgresql-contrib
 
+  detect_pg_version
   clean_broken_cluster
   ensure_postgres_user
   prompt_postgres_password
@@ -110,20 +104,19 @@ setup_replica() {
 
   sudo apt update && sudo apt install -y postgresql
 
+  detect_pg_version
   ensure_postgres_user
   prompt_postgres_password
   clean_broken_cluster
   ensure_cluster_exists
 
-  PG_VERSION=$(detect_pg_version)
-  DATA_DIR="/var/lib/postgresql/$PG_VERSION/main"
-
+  local data_dir="/var/lib/postgresql/$PG_VERSION/main"
   echo "[*] Stopping PostgreSQL and cleaning data directory..."
   sudo systemctl stop postgresql
-  sudo -u postgres rm -rf "$DATA_DIR"
+  sudo -u postgres rm -rf "$data_dir"
 
   echo "[*] Performing base backup from master..."
-  sudo -u postgres pg_basebackup -h "$MASTER_IP" -D "$DATA_DIR" -U replicator -P -R
+  sudo -u postgres pg_basebackup -h "$MASTER_IP" -D "$data_dir" -U replicator -P -R
 
   apply_config_files
   fix_pg_hba_auth
