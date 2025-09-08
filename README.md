@@ -109,39 +109,81 @@ postgres-ha-cluster-vm/
 
 ---
 
-### Installation Order
+## Installation
 
-1️⃣ **Network Configuration** (all nodes)  
+### Network Configuration** (all nodes)  
 ```bash
 sudo cp configs/network-setup.yaml /etc/netplan/00-installer-config.yaml
 sudo netplan apply
 ```
 
-2️⃣ **Master Node**  
+### Setup Script Usage
+
+The `setup.sh` script automates the installation and configuration of each node in the PostgreSQL HA Cluster.  
+It dynamically detects the installed PostgreSQL version and applies the correct configuration files.
+
+---
+
+#### 🔧 Supported Roles
+
+| Role        | Description                          |
+|-------------|--------------------------------------|
+| `master`    | Initializes the primary PostgreSQL node |
+| `replica`   | Sets up a standby node and performs base backup |
+| `pgpool`    | Installs Pgpool-II connection manager |
+| `pgha`      | Installs HA controller components (e.g. keepalived) |
+| `monitoring`| Installs Prometheus + Grafana stack |
+
+---
+
+#### 🚀 How to Run
+
+Navigate to your working directory (e.g. `/opt/pg-ha` or `~/pg-ha`) and run:
+
 ```bash
-export MASTER_IP="10.0.2.101"
+chmod +x setup.sh
+./setup.sh <role> [master_ip]
+```
+
+- `<role>` is one of: `master`, `replica`, `pgpool`, `pgha`, `monitoring`
+- `[master_ip]` is required only for `replica` nodes
+
+---
+
+##### 🧠 Examples
+
+###### Master Node
+```bash
 ./setup.sh master
 ```
 
-3️⃣ **Replica Nodes**  
+###### Replica Node
 ```bash
-./setup.sh replica $MASTER_IP
+./setup.sh replica 10.0.2.101
 ```
 
-4️⃣ **Pgpool Node**  
+###### Pgpool Node
 ```bash
 ./setup.sh pgpool
 ```
 
-5️⃣ **PGHA Node**  
+###### PGHA Node
 ```bash
 ./setup.sh pgha
 ```
 
-6️⃣ **Monitoring Node**  
+###### Monitoring Node
 ```bash
 ./setup.sh monitoring
 ```
+
+---
+
+### ✅ Notes
+
+- The script uses `pg_lsclusters` to detect the installed PostgreSQL version and applies configuration accordingly.
+- If required files are missing or PostgreSQL is not installed, the script will exit with an error.
+- You can safely re-run the script on a node to reapply configuration or recover from partial setup
 
 7️⃣ **Healthcheck on DB Nodes**  
 ```bash
