@@ -132,6 +132,23 @@ verify_connection() {
   echo "[+] Connection verified."
 }
 
+# Disable synchronous commit temporarily
+disable_sync_commit() {
+  local conf="/etc/postgresql/$PG_VERSION/main/postgresql.conf"
+  echo "[*] Temporarily disabling synchronous_commit..."
+  sudo sed -i "s/^synchronous_commit.*/synchronous_commit = off/" "$conf" || echo "synchronous_commit = off" | sudo tee -a "$conf" > /dev/null
+  sudo systemctl restart postgresql@$PG_VERSION-main
+}
+
+# Restore synchronous commit after setup
+restore_sync_commit() {
+  local conf="/etc/postgresql/$PG_VERSION/main/postgresql.conf"
+  echo "[*] Restoring synchronous_commit setting..."
+  sudo sed -i "s/^synchronous_commit.*/synchronous_commit = on/" "$conf"
+  sudo systemctl restart postgresql@$PG_VERSION-main
+}
+
+
 # Main setup function
 setup_master() {
   echo "=== 🚀 Setting up master node ==="
@@ -146,13 +163,20 @@ setup_master() {
   apply_config_files
   fix_pg_hba_auth
   wait_for_postgres
+
+  disable_sync_commit
+
   set_postgres_password
   create_replication_user
+
+  restore_sync_commit
+
   verify_connection
 
   echo -e "\n✅ Master setup complete."
   echo "🔑 Use this password in replica setup: $REPL_PASS"
   unset REPL_PASS
 }
+
 
 setup_master
