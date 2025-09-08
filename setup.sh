@@ -99,6 +99,7 @@ setup_master() {
 
   echo "[+] Master node setup complete."
   echo "=== master setup finished ==="
+}
 
 setup_replica() {
   echo "=== Starting setup for role: replica ==="
