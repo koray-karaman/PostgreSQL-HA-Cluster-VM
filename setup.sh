@@ -1,8 +1,9 @@
 #!/bin/bash
-# PostgreSQL HA Cluster Setup Script (Dynamic Version)
+# PostgreSQL HA Cluster Setup Script (Full Version)
 # Author: Koray Karaman
 
 ROLE="$1"
+MASTER_IP="$2"
 PGHA_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONFIG_DIR="$PGHA_DIR/configs"
 
@@ -10,11 +11,25 @@ detect_pg_version() {
   pg_lsclusters | awk 'NR==2 {print $1}'
 }
 
+ensure_postgres_user() {
+  if ! id "postgres" &>/dev/null; then
+    echo "[*] 'postgres' system user not found. Creating..."
+    sudo adduser --system --group --home /var/lib/postgresql postgres
+    echo "[+] 'postgres' system user created."
+  fi
+}
+
+prompt_postgres_password() {
+  echo -n "🔐 Enter password for PostgreSQL 'postgres' user: "
+  read -s POSTGRES_PW
+  echo
+}
+
 ensure_cluster_exists() {
   PG_VERSION=$(detect_pg_version)
   if [ -z "$PG_VERSION" ]; then
-    echo "[*] No cluster found. Creating PostgreSQL cluster..."
     PG_VERSION=$(psql -V | awk '{print $3}' | cut -d. -f1)
+    echo "[*] No cluster found. Creating PostgreSQL $PG_VERSION cluster..."
     sudo pg_createcluster "$PG_VERSION" main --start
   fi
 }
@@ -26,14 +41,12 @@ apply_config_files() {
 
   sudo mkdir -p "$CONFIG_DIR"
 
-  # Download configs if missing
   [ ! -f "$CONFIG_DIR/postgresql.conf" ] && \
     wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/configs/postgresql.conf -O "$CONFIG_DIR/postgresql.conf"
 
   [ ! -f "$CONFIG_DIR/pg_hba.conf" ] && \
     wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/configs/pg_hba.conf -O "$CONFIG_DIR/pg_hba.conf"
 
-  # Apply configs
   sudo cp "$CONFIG_DIR/postgresql.conf" "$PG_CONF_DIR/postgresql.conf"
   sudo cp "$CONFIG_DIR/pg_hba.conf" "$PG_CONF_DIR/pg_hba.conf"
   sudo systemctl restart postgresql
@@ -50,7 +63,7 @@ fix_pg_hba_auth() {
 
 set_postgres_password() {
   echo "[*] Setting password for postgres user..."
-  sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD 'postgres';"
+  sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD '$POSTGRES_PW';"
 }
 
 create_replication_user() {
@@ -63,6 +76,8 @@ setup_master() {
   sudo apt update && sudo apt upgrade -y
   sudo apt install -y postgresql postgresql-contrib
 
+  ensure_postgres_user
+  prompt_postgres_password
   ensure_cluster_exists
   apply_config_files
   fix_pg_hba_auth
@@ -73,7 +88,6 @@ setup_master() {
   echo "=== master setup finished ==="
 }
 
-# Replica node setup
 setup_replica() {
   echo "=== Starting setup for role: replica ==="
   if [ -z "$MASTER_IP" ]; then
@@ -81,50 +95,51 @@ setup_replica() {
     exit 1
   fi
 
-  sudo apt update && sudo apt upgrade -y
-  sudo apt install -y postgresql
+  sudo apt update && sudo apt install -y postgresql
+
+  ensure_postgres_user
+  prompt_postgres_password
+  ensure_cluster_exists
+
+  PG_VERSION=$(detect_pg_version)
+  DATA_DIR="/var/lib/postgresql/$PG_VERSION/main"
 
   echo "[*] Stopping PostgreSQL and cleaning data directory..."
   sudo systemctl stop postgresql
-  sudo -u postgres rm -rf /var/lib/postgresql/*
+  sudo -u postgres rm -rf "$DATA_DIR"
 
   echo "[*] Performing base backup from master..."
-  sudo -u postgres pg_basebackup -h "$MASTER_IP" -D /var/lib/postgresql/$(detect_pg_version)/main -U replicator -P -R
+  sudo -u postgres pg_basebackup -h "$MASTER_IP" -D "$DATA_DIR" -U replicator -P -R
 
-  configure_postgres
+  apply_config_files
+  fix_pg_hba_auth
+  set_postgres_password
 
   echo "[+] Replica node setup complete."
   echo "=== replica setup finished ==="
 }
 
-# Pgpool setup
 setup_pgpool() {
   echo "=== Starting setup for role: pgpool ==="
   sudo apt update && sudo apt install -y pgpool2
   echo "[*] Pgpool installed."
-  # Additional config steps can be added here
   echo "=== pgpool setup finished ==="
 }
 
-# PGHA setup
 setup_pgha() {
   echo "=== Starting setup for role: pgha ==="
   sudo apt update && sudo apt install -y keepalived
-  echo "[*] PGHA components installed."
-  # Additional config steps can be added here
+  echo "[*] Keepalived installed."
   echo "=== pgha setup finished ==="
 }
 
-# Monitoring setup
 setup_monitoring() {
   echo "=== Starting setup for role: monitoring ==="
   sudo apt update && sudo apt install -y prometheus grafana
   echo "[*] Prometheus and Grafana installed."
-  # Additional config steps can be added here
   echo "=== monitoring setup finished ==="
 }
 
-# Main dispatcher
 case "$ROLE" in
   master)
     setup_master
