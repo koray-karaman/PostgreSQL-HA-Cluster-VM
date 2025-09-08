@@ -3,64 +3,71 @@
 # Author: Koray Karaman
 
 ROLE="$1"
-MASTER_IP="$2"
-
-# Automatically detect working directory
 PGHA_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONFIG_DIR="$PGHA_DIR/configs"
 
-
-# PostgreSQL version detection
 detect_pg_version() {
   pg_lsclusters | awk 'NR==2 {print $1}'
 }
 
-# PostgreSQL configuration
-configure_postgres() {
-  echo "[*] Applying PostgreSQL configuration..."
-
-  PG_VERSION=$(pg_lsclusters | awk 'NR==2 {print $1}')
-  PG_CONF_DIR="/etc/postgresql/$PG_VERSION/main"
-  CONFIG_DIR="$PGHA_DIR/configs"
-
-  # Ensure config directory exists
-  mkdir -p "$CONFIG_DIR"
-
-  # Download config files if missing
-  if [ ! -f "$CONFIG_DIR/postgresql.conf" ]; then
-    echo "[*] Downloading postgresql.conf..."
-    wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/configs/postgresql.conf -O "$CONFIG_DIR/postgresql.conf"
-  fi
-
-  if [ ! -f "$CONFIG_DIR/pg_hba.conf" ]; then
-    echo "[*] Downloading pg_hba.conf..."
-    wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/configs/pg_hba.conf -O "$CONFIG_DIR/pg_hba.conf"
-  fi
-
-  # Apply configs
-  if [ -d "$PG_CONF_DIR" ]; then
-    sudo systemctl stop postgresql
-    sudo cp "$CONFIG_DIR/postgresql.conf" "$PG_CONF_DIR/postgresql.conf"
-    sudo cp "$CONFIG_DIR/pg_hba.conf" "$PG_CONF_DIR/pg_hba.conf"
-    sudo systemctl start postgresql
-    echo "[+] PostgreSQL configuration applied to version $PG_VERSION"
-  else
-    echo "[!] ERROR: PostgreSQL config directory not found: $PG_CONF_DIR"
-    exit 1
+ensure_cluster_exists() {
+  PG_VERSION=$(detect_pg_version)
+  if [ -z "$PG_VERSION" ]; then
+    echo "[*] No cluster found. Creating PostgreSQL cluster..."
+    PG_VERSION=$(psql -V | awk '{print $3}' | cut -d. -f1)
+    sudo pg_createcluster "$PG_VERSION" main --start
   fi
 }
 
+apply_config_files() {
+  echo "[*] Applying PostgreSQL configuration..."
+  PG_VERSION=$(detect_pg_version)
+  PG_CONF_DIR="/etc/postgresql/$PG_VERSION/main"
 
-# Master node setup
+  sudo mkdir -p "$CONFIG_DIR"
+
+  # Download configs if missing
+  [ ! -f "$CONFIG_DIR/postgresql.conf" ] && \
+    wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/configs/postgresql.conf -O "$CONFIG_DIR/postgresql.conf"
+
+  [ ! -f "$CONFIG_DIR/pg_hba.conf" ] && \
+    wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/configs/pg_hba.conf -O "$CONFIG_DIR/pg_hba.conf"
+
+  # Apply configs
+  sudo cp "$CONFIG_DIR/postgresql.conf" "$PG_CONF_DIR/postgresql.conf"
+  sudo cp "$CONFIG_DIR/pg_hba.conf" "$PG_CONF_DIR/pg_hba.conf"
+  sudo systemctl restart postgresql
+  echo "[+] Configuration applied to PostgreSQL $PG_VERSION"
+}
+
+fix_pg_hba_auth() {
+  PG_VERSION=$(detect_pg_version)
+  PG_HBA="/etc/postgresql/$PG_VERSION/main/pg_hba.conf"
+  echo "[*] Switching peer auth to md5 for postgres user..."
+  sudo sed -i 's/^local\s\+all\s\+postgres\s\+peer/local all postgres md5/' "$PG_HBA"
+  sudo systemctl restart postgresql
+}
+
+set_postgres_password() {
+  echo "[*] Setting password for postgres user..."
+  sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD 'postgres';"
+}
+
+create_replication_user() {
+  echo "[*] Creating replication user..."
+  sudo -u postgres psql -c "CREATE ROLE replicator WITH REPLICATION LOGIN ENCRYPTED PASSWORD 'replicator';"
+}
+
 setup_master() {
   echo "=== Starting setup for role: master ==="
   sudo apt update && sudo apt upgrade -y
   sudo apt install -y postgresql postgresql-contrib
 
-  configure_postgres
-
-  echo "[*] Creating replication user..."
-  sudo -u postgres psql -c "CREATE ROLE replicator WITH REPLICATION LOGIN ENCRYPTED PASSWORD 'replicator';"
+  ensure_cluster_exists
+  apply_config_files
+  fix_pg_hba_auth
+  set_postgres_password
+  create_replication_user
 
   echo "[+] Master node setup complete."
   echo "=== master setup finished ==="
