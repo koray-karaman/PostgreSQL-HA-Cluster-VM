@@ -1,7 +1,6 @@
 #!/bin/bash
 cd /tmp || true
 
-MASTER_IP="$1"
 PGHA_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 CONFIG_DIR="$PGHA_DIR/configs"
 PG_VERSION=""
@@ -17,6 +16,14 @@ ensure_postgres_user() {
     echo "[*] Creating 'postgres' system user..."
     sudo adduser --system --group --home /var/lib/postgresql postgres
     echo "[+] 'postgres' user created."
+  fi
+}
+
+prompt_master_ip() {
+  read -p "🌐 Enter MASTER IP address: " MASTER_IP
+  if [[ ! "$MASTER_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "[!] Invalid IP format. Aborting."
+    exit 1
   fi
 }
 
@@ -99,6 +106,7 @@ setup_replica() {
 
   detect_pg_version
   ensure_postgres_user
+  prompt_master_ip
   prompt_postgres_password
   clean_broken_cluster
   ensure_cluster_exists
