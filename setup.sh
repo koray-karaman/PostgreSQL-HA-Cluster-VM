@@ -15,25 +15,38 @@ detect_pg_version() {
 # PostgreSQL configuration
 configure_postgres() {
   echo "[*] Applying PostgreSQL configuration..."
-  PG_VERSION=$(detect_pg_version)
-  PG_CONF_DIR="/etc/postgresql/$PG_VERSION/main"
 
-  if [ ! -d "$PG_CONF_DIR" ]; then
+  PG_VERSION=$(pg_lsclusters | awk 'NR==2 {print $1}')
+  PG_CONF_DIR="/etc/postgresql/$PG_VERSION/main"
+  CONFIG_DIR="$PGHA_DIR/configs"
+
+  # Ensure config directory exists
+  mkdir -p "$CONFIG_DIR"
+
+  # Download config files if missing
+  if [ ! -f "$CONFIG_DIR/postgresql.conf" ]; then
+    echo "[*] Downloading postgresql.conf..."
+    wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/configs/postgresql.conf -O "$CONFIG_DIR/postgresql.conf"
+  fi
+
+  if [ ! -f "$CONFIG_DIR/pg_hba.conf" ]; then
+    echo "[*] Downloading pg_hba.conf..."
+    wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/configs/pg_hba.conf -O "$CONFIG_DIR/pg_hba.conf"
+  fi
+
+  # Apply configs
+  if [ -d "$PG_CONF_DIR" ]; then
+    sudo systemctl stop postgresql
+    sudo cp "$CONFIG_DIR/postgresql.conf" "$PG_CONF_DIR/postgresql.conf"
+    sudo cp "$CONFIG_DIR/pg_hba.conf" "$PG_CONF_DIR/pg_hba.conf"
+    sudo systemctl start postgresql
+    echo "[+] PostgreSQL configuration applied to version $PG_VERSION"
+  else
     echo "[!] ERROR: PostgreSQL config directory not found: $PG_CONF_DIR"
     exit 1
   fi
-
-  if [ ! -f "$CONFIG_DIR/postgresql.conf" ] || [ ! -f "$CONFIG_DIR/pg_hba.conf" ]; then
-    echo "[!] ERROR: Missing config files in $CONFIG_DIR"
-    exit 1
-  fi
-
-  sudo systemctl stop postgresql
-  sudo cp "$CONFIG_DIR/postgresql.conf" "$PG_CONF_DIR/postgresql.conf"
-  sudo cp "$CONFIG_DIR/pg_hba.conf" "$PG_CONF_DIR/pg_hba.conf"
-  sudo systemctl start postgresql
-  echo "[+] PostgreSQL configuration applied to version $PG_VERSION"
 }
+
 
 # Master node setup
 setup_master() {
