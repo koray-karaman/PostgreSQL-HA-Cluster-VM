@@ -85,7 +85,6 @@ apply_config_files() {
   echo "[+] Configuration applied."
 }
 
-
 # Switch peer auth to md5 for local postgres login
 fix_pg_hba_auth() {
   local hba="/etc/postgresql/$PG_VERSION/main/pg_hba.conf"
@@ -110,20 +109,15 @@ wait_for_postgres() {
   exit 1
 }
 
-# Set password for postgres user
-set_postgres_password() {
-  echo "[*] Setting password for postgres..."
-  sudo -u postgres /usr/lib/postgresql/$PG_VERSION/bin/psql -p 5432 -c "ALTER USER postgres WITH PASSWORD '$POSTGRES_PW';"
-}
-
-# Verify local connection
-verify_connection() {
-  echo "[*] Verifying connection..."
-  PGPASSWORD="$POSTGRES_PW" psql -U postgres -h 127.0.0.1 -p 5432 -c "SELECT current_user, inet_server_addr();" || {
-    echo "[!] Connection failed."
+# Verify postgres password by attempting connection
+verify_postgres_password() {
+  echo "[*] Verifying postgres password..."
+  if PGPASSWORD="$POSTGRES_PW" psql -U postgres -h 127.0.0.1 -p 5432 -c "SELECT current_user;" &>/dev/null; then
+    echo "[+] Password verified. Connection successful."
+  else
+    echo "[!] Connection failed. Invalid password or PostgreSQL not ready."
     exit 1
-  }
-  echo "[+] Connection verified."
+  fi
 }
 
 # Main setup function
@@ -149,8 +143,7 @@ setup_replica() {
   apply_config_files
   fix_pg_hba_auth
   wait_for_postgres
-  set_postgres_password
-  verify_connection
+  verify_postgres_password
 
   echo "[✓] Replica setup complete."
   unset REPL_PASS
