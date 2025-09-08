@@ -1,14 +1,19 @@
 #!/bin/bash
-# PostgreSQL HA Cluster Setup Script (Full Version)
+# PostgreSQL HA Cluster Setup Script (Full version)
 # Author: Koray Karaman
 
 ROLE="$1"
-MASTER_IP="$2"
 PGHA_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONFIG_DIR="$PGHA_DIR/configs"
 
 detect_pg_version() {
-  pg_lsclusters | awk 'NR==2 {print $1}'
+  local version
+  version=$(pg_lsclusters | awk 'NR==2 {print $1}')
+  if [ -z "$version" ]; then
+    version=$(psql -V | awk '{print $3}' | cut -d. -f1)
+    echo "[*] Fallback: Detected PostgreSQL version as $version"
+  fi
+  echo "$version"
 }
 
 ensure_postgres_user() {
@@ -25,10 +30,26 @@ prompt_postgres_password() {
   echo
 }
 
+clean_broken_cluster() {
+  if pg_lsclusters 2>&1 | grep -q "Invalid data directory"; then
+    echo "[!] Detected broken cluster. Cleaning manually..."
+    sudo rm -rf /etc/postgresql/14/main
+    sudo rm -rf /var/lib/postgresql/14/main
+  fi
+}
+
 ensure_cluster_exists() {
   PG_VERSION=$(detect_pg_version)
-  if [ -z "$PG_VERSION" ]; then
-    PG_VERSION=$(psql -V | awk '{print $3}' | cut -d. -f1)
+
+  PG_CONF_DIR="/etc/postgresql/$PG_VERSION/main"
+  PG_DATA_DIR="/var/lib/postgresql/$PG_VERSION/main"
+
+  if [ -d "$PG_CONF_DIR" ] && [ ! -d "$PG_DATA_DIR" ]; then
+    echo "[!] Config exists but data directory missing. Cleaning up..."
+    sudo rm -rf "$PG_CONF_DIR"
+  fi
+
+  if ! pg_lsclusters | grep -q "$PG_VERSION"; then
     echo "[*] No cluster found. Creating PostgreSQL $PG_VERSION cluster..."
     sudo pg_createcluster "$PG_VERSION" main --start
   fi
@@ -38,14 +59,6 @@ apply_config_files() {
   echo "[*] Applying PostgreSQL configuration..."
   PG_VERSION=$(detect_pg_version)
   PG_CONF_DIR="/etc/postgresql/$PG_VERSION/main"
-
-  sudo mkdir -p "$CONFIG_DIR"
-
-  [ ! -f "$CONFIG_DIR/postgresql.conf" ] && \
-    wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/configs/postgresql.conf -O "$CONFIG_DIR/postgresql.conf"
-
-  [ ! -f "$CONFIG_DIR/pg_hba.conf" ] && \
-    wget -q https://raw.githubusercontent.com/koray-karaman/PostgreSQL-HA-Cluster-VM/main/configs/pg_hba.conf -O "$CONFIG_DIR/pg_hba.conf"
 
   sudo cp "$CONFIG_DIR/postgresql.conf" "$PG_CONF_DIR/postgresql.conf"
   sudo cp "$CONFIG_DIR/pg_hba.conf" "$PG_CONF_DIR/pg_hba.conf"
@@ -73,9 +86,9 @@ create_replication_user() {
 
 setup_master() {
   echo "=== Starting setup for role: master ==="
-  sudo apt update && sudo apt upgrade -y
-  sudo apt install -y postgresql postgresql-contrib
+  sudo apt update && sudo apt install -y postgresql postgresql-contrib
 
+  clean_broken_cluster
   ensure_postgres_user
   prompt_postgres_password
   ensure_cluster_exists
@@ -86,7 +99,6 @@ setup_master() {
 
   echo "[+] Master node setup complete."
   echo "=== master setup finished ==="
-}
 
 setup_replica() {
   echo "=== Starting setup for role: replica ==="
