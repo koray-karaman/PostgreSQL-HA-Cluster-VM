@@ -4,8 +4,11 @@
 
 ROLE="$1"
 MASTER_IP="$2"
-PGHA_DIR="/opt/pg-ha"
+
+# Automatically detect working directory
+PGHA_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONFIG_DIR="$PGHA_DIR/configs"
+
 
 # PostgreSQL version detection
 detect_pg_version() {
