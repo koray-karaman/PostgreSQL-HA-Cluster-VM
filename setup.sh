@@ -7,17 +7,15 @@ PG_VERSION=""
 DATA_DIR=""
 
 detect_pg_version() {
-  local version
-  version=$(psql -V | awk '{print $3}' | cut -d. -f1)
-  PG_VERSION="$version"
+  PG_VERSION=$(psql -V | awk '{print $3}' | cut -d. -f1)
   DATA_DIR="/var/lib/postgresql/$PG_VERSION/main"
 }
 
 ensure_postgres_user() {
   if ! id "postgres" &>/dev/null; then
-    echo "[*] 'postgres' system user not found. Creating..."
+    echo "[*] Creating 'postgres' system user..."
     sudo adduser --system --group --home /var/lib/postgresql postgres
-    echo "[+] 'postgres' system user created."
+    echo "[+] 'postgres' user created."
   fi
 }
 
@@ -30,8 +28,7 @@ prompt_postgres_password() {
 clean_broken_cluster() {
   echo "[*] Cleaning broken cluster if exists..."
   sudo pg_dropcluster $PG_VERSION main --stop 2>/dev/null || true
-  sudo rm -rf /etc/postgresql/$PG_VERSION/main
-  sudo rm -rf "$DATA_DIR"
+  sudo rm -rf /etc/postgresql/$PG_VERSION/main "$DATA_DIR"
 }
 
 ensure_cluster_exists() {
@@ -43,25 +40,20 @@ apply_config_files() {
   echo "[*] Applying PostgreSQL configuration..."
   local conf_dir="/etc/postgresql/$PG_VERSION/main"
 
-  # Yedekle
-  sudo cp "$conf_dir/postgresql.conf" "$conf_dir/postgresql.conf.bak"
-
-  # Uygula
   sudo cp "$CONFIG_DIR/postgresql.conf" "$conf_dir/postgresql.conf"
   sudo cp "$CONFIG_DIR/pg_hba.conf" "$conf_dir/pg_hba.conf"
 
-  # data_directory tanımını ekle
-  sudo sed -i "/^#*data_directory\s*=.*/d" "$conf_dir/postgresql.conf"
-  echo "data_directory = '$DATA_DIR'" | sudo tee -a "$conf_dir/postgresql.conf" > /dev/null
+  # Güvenli data_directory ekleme
+  sudo sed -i '/^data_directory\s*=.*/d' "$conf_dir/postgresql.conf"
+  echo -e "\n# Explicit data directory for HA setup\ndata_directory = '$DATA_DIR'" | sudo tee -a "$conf_dir/postgresql.conf" > /dev/null
 
-  # Restart
   sudo systemctl restart postgresql@$PG_VERSION-main
-  echo "[+] Configuration applied to PostgreSQL $PG_VERSION"
+  echo "[+] Configuration applied."
 }
 
 fix_pg_hba_auth() {
   local hba="/etc/postgresql/$PG_VERSION/main/pg_hba.conf"
-  echo "[*] Switching peer auth to md5 for postgres user..."
+  echo "[*] Switching peer auth to md5..."
   sudo sed -i 's/^local\s\+all\s\+postgres\s\+peer/local all postgres md5/' "$hba"
   sudo systemctl restart postgresql@$PG_VERSION-main
 }
@@ -82,7 +74,7 @@ wait_for_postgres() {
 }
 
 set_postgres_password() {
-  echo "[*] Setting password for postgres user..."
+  echo "[*] Setting password for postgres..."
   sudo -u postgres /usr/lib/postgresql/$PG_VERSION/bin/psql -p 5432 -c "ALTER USER postgres WITH PASSWORD '$POSTGRES_PW';"
 }
 
@@ -92,16 +84,16 @@ create_replication_user() {
 }
 
 verify_connection() {
-  echo "[*] Verifying connection as 'postgres'..."
+  echo "[*] Verifying connection..."
   PGPASSWORD="$POSTGRES_PW" psql -U postgres -h localhost -p 5432 -c "SELECT current_user, inet_server_addr();" || {
-    echo "[!] Connection verification failed."
+    echo "[!] Connection failed."
     exit 1
   }
-  echo "[+] Connection verified successfully."
+  echo "[+] Connection verified."
 }
 
 setup_master() {
-  echo "=== Starting setup for role: master ==="
+  echo "=== Setting up master node ==="
   sudo apt update && sudo apt install -y postgresql postgresql-contrib
 
   detect_pg_version
@@ -116,14 +108,13 @@ setup_master() {
   create_replication_user
   verify_connection
 
-  echo "[+] Master node setup complete."
-  echo "=== master setup finished ==="
+  echo "[✓] Master setup complete."
 }
 
 setup_replica() {
-  echo "=== Starting setup for role: replica ==="
+  echo "=== Setting up replica node ==="
   if [ -z "$MASTER_IP" ]; then
-    echo "[!] ERROR: Master IP not provided."
+    echo "[!] Master IP not provided."
     exit 1
   fi
 
@@ -135,7 +126,7 @@ setup_replica() {
   clean_broken_cluster
   ensure_cluster_exists
 
-  echo "[*] Stopping PostgreSQL and cleaning data directory..."
+  echo "[*] Cleaning data directory..."
   sudo systemctl stop postgresql@$PG_VERSION-main
   sudo -u postgres rm -rf "$DATA_DIR"
 
@@ -148,49 +139,36 @@ setup_replica() {
   set_postgres_password
   verify_connection
 
-  echo "[+] Replica node setup complete."
-  echo "=== replica setup finished ==="
+  echo "[✓] Replica setup complete."
 }
 
 setup_pgpool() {
-  echo "=== Starting setup for role: pgpool ==="
+  echo "=== Setting up pgpool node ==="
   sudo apt update && sudo apt install -y pgpool2
-  echo "[*] Pgpool installed."
-  echo "=== pgpool setup finished ==="
+  echo "[✓] Pgpool installed."
 }
 
 setup_pgha() {
-  echo "=== Starting setup for role: pgha ==="
+  echo "=== Setting up keepalived node ==="
   sudo apt update && sudo apt install -y keepalived
-  echo "[*] Keepalived installed."
-  echo "=== pgha setup finished ==="
+  echo "[✓] Keepalived installed."
 }
 
 setup_monitoring() {
-  echo "=== Starting setup for role: monitoring ==="
+  echo "=== Setting up monitoring node ==="
   sudo apt update && sudo apt install -y prometheus grafana
-  echo "[*] Prometheus and Grafana installed."
-  echo "=== monitoring setup finished ==="
+  echo "[✓] Monitoring stack installed."
 }
 
 case "$ROLE" in
-  master)
-    setup_master
-    ;;
-  replica)
-    setup_replica
-    ;;
-  pgpool)
-    setup_pgpool
-    ;;
-  pgha)
-    setup_pgha
-    ;;
-  monitoring)
-    setup_monitoring
-    ;;
+  master) setup_master ;;
+  replica) setup_replica ;;
+  pgpool) setup_pgpool ;;
+  pgha) setup_pgha ;;
+  monitoring) setup_monitoring ;;
   *)
-    echo "[!] ERROR: Unknown role '$ROLE'. Valid roles: master, replica, pgpool, pgha, monitoring"
+    echo "[!] Unknown role: $ROLE"
+    echo "Valid roles: master, replica, pgpool, pgha, monitoring"
     exit 1
     ;;
 esac
