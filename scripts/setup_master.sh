@@ -69,7 +69,7 @@ apply_config_files() {
   sudo grep -q "127.0.0.1/32" "$conf_dir/pg_hba.conf" || echo "host    all    all    127.0.0.1/32    scram-sha-256" | sudo tee -a "$conf_dir/pg_hba.conf" > /dev/null
 
   # Add replication access for replicas (with newline to avoid merge errors)
-  grep -q "host replication replicator 192.168.56.0/24 scram-sha-256" "$conf_dir/pg_hba.conf" || \
+  sudo grep -q "host replication replicator 192.168.56.0/24 scram-sha-256" "$conf_dir/pg_hba.conf" || \
   echo -e "\nhost replication replicator 192.168.56.0/24 scram-sha-256" | sudo tee -a "$conf_dir/pg_hba.conf" > /dev/null
 
   sudo systemctl restart postgresql@$PG_VERSION-main
