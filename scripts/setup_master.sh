@@ -155,7 +155,16 @@ restore_sync_replication() {
   sudo systemctl restart postgresql@$PG_VERSION-main
 }
 
+prompt_replica_names() {
+  echo -n "📛 Enter name for replica 1 (e.g. pg_replica1): "
+  read REPL1_NAME
+  echo -n "📛 Enter name for replica 2 (e.g. pg_replica2): "
+  read REPL2_NAME
 
+  echo "[*] Configuring synchronous_standby_names..."
+  sed -i "/^synchronous_standby_names/d" /etc/postgresql/$PG_VERSION/main/postgresql.conf
+  echo -e "\nsynchronous_standby_names = 'FIRST 1 ($REPL1_NAME, $REPL2_NAME)'" >> /etc/postgresql/$PG_VERSION/main/postgresql.conf
+}
 
 # Main setup function
 setup_master() {
@@ -168,6 +177,7 @@ setup_master() {
   prompt_postgres_password
   prompt_replicator_password
   ensure_cluster_exists
+  prompt_replica_names
   apply_config_files
   fix_pg_hba_auth
   wait_for_postgres
