@@ -1,6 +1,6 @@
 #!/bin/bash
 cd /tmp || true
-
+  echo -n "🚀VERSION : 250909-2331🚀"
 PGHA_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 CONFIG_DIR="$PGHA_DIR/configs"
 PG_VERSION=""
