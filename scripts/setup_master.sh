@@ -1,11 +1,12 @@
 #!/bin/bash
-cd /tmp || true
 
+
+PGHA_DIR="$(cd "$(dirname "$0")" && pwd)"
 PGHA_CONFIG="/etc/pg_ha.conf"
-CONFIG_DIR="/opt/pg-ha/configs"
+CONFIG_DIR="$PGHA_DIR/configs"
 PG_VERSION=""
 DATA_DIR=""
-
+cd /tmp || true
 detect_pg_version() {
   PG_VERSION=$(psql -V | awk '{print $3}' | cut -d. -f1)
   DATA_DIR="/var/lib/postgresql/$PG_VERSION/main"
