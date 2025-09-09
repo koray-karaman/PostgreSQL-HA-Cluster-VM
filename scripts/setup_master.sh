@@ -6,13 +6,18 @@ CONFIG_DIR="$PGHA_DIR/configs"
 PG_VERSION=""
 DATA_DIR=""
 
-cd /tmp || true
 detect_pg_version() {
   PG_VERSION=$(psql -V | awk '{print $3}' | cut -d. -f1)
   DATA_DIR="/var/lib/postgresql/$PG_VERSION/main"
 }
 
 collect_node_config() {
+  local config_path="/etc/pg_ha.conf"
+  if [ -f "$config_path" ]; then
+    echo "[*] Removing existing pg_ha.conf configuration..."
+    sudo rm -f "$config_path"
+  fi
+
   echo "🧠 Starting PostgreSQL HA configuration..."
 
   echo "🌐 MASTER NODE Information:"
@@ -154,18 +159,9 @@ verify_connection() {
   echo "[+] Connection successful."
 }
 
-reset_pg_ha_config() {
-  local config_path="/etc/pg_ha.conf"
-  if [ -f "$config_path" ]; then
-    echo "[*] Removing existing pg_ha.conf configuration..."
-    sudo rm -f "$config_path"
-  fi
-}
-
 setup_master() {
   echo "=== 🚀 MASTER NODE SETUP STARTING ==="
   sudo apt update && sudo apt install -y postgresql postgresql-contrib
-  reset_pg_ha_config
   detect_pg_version
   clean_broken_cluster
   ensure_postgres_user
