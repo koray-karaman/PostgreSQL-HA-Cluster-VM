@@ -22,6 +22,34 @@ for script in setup_master.sh setup_replica.sh setup_pgpool.sh setup_pgha.sh set
   chmod +x "$SCRIPTS_DIR/$script"
 done
 
+
+verify_downloads() {
+  local missing=0
+
+  # Check config files
+  for file in postgresql.conf pg_hba.conf; do
+    if [ ! -f "$CONFIGS_DIR/$file" ]; then
+      echo "[!] Missing config file: $file"
+      missing=1
+    fi
+  done
+
+  # Check script files
+  for script in setup_master.sh setup_replica.sh setup_pgpool.sh setup_pgha.sh setup_monitoring.sh; do
+    if [ ! -f "$SCRIPTS_DIR/$script" ]; then
+      echo "[!] Missing script file: $script"
+      missing=1
+    fi
+  done
+
+  if [ "$missing" -eq 1 ]; then
+    echo "[✗] One or more required files are missing. Setup aborted."
+    exit 1
+  fi
+}
+
+
+verify_downloads
 echo "[+] Environment ready."
 
 # Prompt user for role
@@ -65,3 +93,4 @@ case "$CHOICE" in
 esac
 
 echo "[✓] Setup completed for role: $ROLE"
+
