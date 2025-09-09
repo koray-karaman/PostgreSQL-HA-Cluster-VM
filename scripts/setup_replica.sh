@@ -12,13 +12,6 @@ detect_pg_version() {
   DATA_DIR="/var/lib/postgresql/$PG_VERSION/main"
 }
 
-reset_pg_ha_config() {
-  if [ -f "$PGHA_CONFIG" ]; then
-    echo "[*] Removing existing pg_ha.conf configuration..."
-    sudo rm -f "$PGHA_CONFIG"
-  fi
-}
-
 collect_replica_config() {
   echo "🧠 Starting PostgreSQL Replica Configuration..."
 
@@ -128,7 +121,6 @@ setup_replica() {
   echo "=== 🛰️ REPLICA NODE SETUP STARTING ==="
   sudo apt update && sudo apt install -y postgresql
 
-  reset_pg_ha_config
   detect_pg_version
   ensure_postgres_user
   collect_replica_config

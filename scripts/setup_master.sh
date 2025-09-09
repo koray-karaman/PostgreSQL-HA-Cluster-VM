@@ -38,6 +38,11 @@ collect_node_config() {
   read -s -p "  ➤ Password for 'replicator' user: " REPL_PASS
   echo
 
+  if [ -f "$PGHA_CONFIG" ]; then
+    echo "[*] Removing existing pg_ha.conf configuration..."
+    sudo rm -f "$PGHA_CONFIG"
+  fi
+  
   echo "📦 Saving configuration to → $PGHA_CONFIG"
   sudo tee "$PGHA_CONFIG" > /dev/null <<EOF
 master_name=$MASTER_NAME
@@ -84,7 +89,7 @@ append_pg_hba_for_nodes() {
   local hba="/etc/postgresql/$PG_VERSION/main/pg_hba.conf"
   echo "[*] Adding pg_hba.conf access rules..."
 
-  for ip in "$replica1_ip" "$replica2_ip"; do
+  for ip in "$REPL1_IP" "$REPL2_IP"; do
     echo "host    all    postgres    $ip/32    scram-sha-256" | sudo tee -a "$hba" > /dev/null
     echo "host    replication    replicator    $ip/32    scram-sha-256" | sudo tee -a "$hba" > /dev/null
   done
@@ -94,7 +99,7 @@ configure_sync_standby_names() {
   local conf="/etc/postgresql/$PG_VERSION/main/postgresql.conf"
   echo "[*] Configuring synchronous_standby_names..."
   sudo sed -i "/^synchronous_standby_names/d" "$conf"
-  echo "synchronous_standby_names = 'FIRST 1 ($replica1_name, $replica2_name)'" | sudo tee -a "$conf" > /dev/null
+  echo "synchronous_standby_names = 'FIRST 1 ($REPL1_NAME, $REPL2_NAME)'" | sudo tee -a "$conf" > /dev/null
 }
 
 fix_pg_hba_auth() {
@@ -130,7 +135,7 @@ set_postgres_password() {
   echo "[*] Setting password for postgres..."
   sudo -u postgres psql -p 5432 <<EOF
 SET synchronous_commit = off;
-ALTER USER postgres WITH PASSWORD '$postgres_pw';
+ALTER USER postgres WITH PASSWORD '$POSTGRES_PW';
 EOF
 }
 
@@ -141,9 +146,9 @@ SET synchronous_commit = off;
 DO \$\$
 BEGIN
    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'replicator') THEN
-      CREATE ROLE replicator WITH REPLICATION LOGIN PASSWORD '$replicator_pw';
+      CREATE ROLE replicator WITH REPLICATION LOGIN PASSWORD '$REPL_PASS';
    ELSE
-      ALTER ROLE replicator WITH PASSWORD '$replicator_pw';
+      ALTER ROLE replicator WITH PASSWORD '$REPL_PASS';
    END IF;
 END
 \$\$;
@@ -152,7 +157,7 @@ EOF
 
 verify_connection() {
   echo "[*] Verifying local connection..."
-  PGPASSWORD="$postgres_pw" psql -U postgres -h 127.0.0.1 -p 5432 -c "SELECT current_user, inet_server_addr;" || {
+  PGPASSWORD="$POSTGRES_PW" psql -U postgres -h 127.0.0.1 -p 5432 -c "SELECT current_user, inet_server_addr;" || {
     echo "[!] Connection failed."
     exit 1
   }
