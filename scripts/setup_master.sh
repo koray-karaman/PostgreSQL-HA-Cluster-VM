@@ -6,7 +6,14 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
-# Switch to the 'postgres' system user to perform all PostgreSQL operations
+# Ensure 'postgres' system user exists
+if ! id "postgres" &>/dev/null; then
+  echo "[*] Creating system user 'postgres'..."
+  sudo adduser --system --group --home /var/lib/postgresql postgres
+fi
+
+# Switch to postgres user for all PostgreSQL operations
+echo "[*] Switching user 'postgres'..."
 sudo -u postgres bash <<'EOF'
 
 # Collect configuration details interactively
