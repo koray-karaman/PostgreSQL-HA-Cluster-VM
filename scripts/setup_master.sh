@@ -1,58 +1,68 @@
 #!/bin/bash
 cd /tmp || true
 
-ROLE="$1"
-MASTER_IP="$2"
-PGHA_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-CONFIG_DIR="$PGHA_DIR/configs"
+PGHA_CONFIG="/etc/pg_ha.conf"
+CONFIG_DIR="/opt/pg-ha/configs"
 PG_VERSION=""
 DATA_DIR=""
-REPL_PASS=""
-POSTGRES_PW=""
 
-# Detect PostgreSQL major version and data directory
 detect_pg_version() {
   PG_VERSION=$(psql -V | awk '{print $3}' | cut -d. -f1)
   DATA_DIR="/var/lib/postgresql/$PG_VERSION/main"
 }
 
-# Ensure postgres system user exists
-ensure_postgres_user() {
-  if ! id "postgres" &>/dev/null; then
-    echo "[*] Creating 'postgres' system user..."
-    sudo adduser --system --group --home /var/lib/postgresql postgres
-    echo "[+] 'postgres' user created."
-  fi
-}
+collect_node_config() {
+  echo "🧠 Starting PostgreSQL HA configuration..."
 
-# Prompt for postgres password
-prompt_postgres_password() {
-  echo -n "🔐 Enter password for PostgreSQL 'postgres' user: "
-  read -s POSTGRES_PW
+  echo "🌐 MASTER NODE Information:"
+  read -p "  ➤ Master IP address: " MASTER_IP
+  read -p "  ➤ Master name: " MASTER_NAME
+
+  echo "📡 REPLICA 1 Information:"
+  read -p "  ➤ Replica 1 IP address: " REPL1_IP
+  read -p "  ➤ Replica 1 name: " REPL1_NAME
+
+  echo "📡 REPLICA 2 Information:"
+  read -p "  ➤ Replica 2 IP address: " REPL2_IP
+  read -p "  ➤ Replica 2 name: " REPL2_NAME
+
+  echo "🔐 Passwords:"
+  read -s -p "  ➤ Password for 'postgres' user: " POSTGRES_PW
   echo
-}
-
-# Prompt for replicator password
-prompt_replicator_password() {
-  echo -n "🔐 Enter password for replication user 'replicator': "
-  read -s REPL_PASS
+  read -s -p "  ➤ Password for 'replicator' user: " REPL_PASS
   echo
+
+  echo "📦 Saving configuration to → $PGHA_CONFIG"
+  sudo tee "$PGHA_CONFIG" > /dev/null <<EOF
+master_name=$MASTER_NAME
+master_ip=$MASTER_IP
+replica1_name=$REPL1_NAME
+replica1_ip=$REPL1_IP
+replica2_name=$REPL2_NAME
+replica2_ip=$REPL2_IP
+postgres_pw=$POSTGRES_PW
+replicator_pw=$REPL_PASS
+EOF
 }
 
-# Drop broken cluster and clean data directory
 clean_broken_cluster() {
-  echo "[*] Cleaning broken cluster if exists..."
+  echo "[*] Cleaning any existing cluster..."
   sudo pg_dropcluster $PG_VERSION main --stop 2>/dev/null || true
   sudo rm -rf /etc/postgresql/$PG_VERSION/main "$DATA_DIR"
 }
 
-# Create new PostgreSQL cluster
+ensure_postgres_user() {
+  if ! id "postgres" &>/dev/null; then
+    echo "[*] Creating system user 'postgres'..."
+    sudo adduser --system --group --home /var/lib/postgresql postgres
+  fi
+}
+
 ensure_cluster_exists() {
-  echo "[*] Creating PostgreSQL $PG_VERSION cluster..."
+  echo "[*] Creating PostgreSQL cluster..."
   sudo pg_createcluster "$PG_VERSION" main --start
 }
 
-# Apply custom configuration files
 apply_config_files() {
   echo "[*] Applying PostgreSQL configuration..."
   local conf_dir="/etc/postgresql/$PG_VERSION/main"
@@ -60,141 +70,125 @@ apply_config_files() {
   sudo cp "$CONFIG_DIR/postgresql.conf" "$conf_dir/postgresql.conf"
   sudo cp "$CONFIG_DIR/pg_hba.conf" "$conf_dir/pg_hba.conf"
 
-  # Explicit data directory for HA setup
   sudo sed -i '/^data_directory\s*=.*/d' "$conf_dir/postgresql.conf"
-  echo -e "\n# Explicit data directory for HA setup\ndata_directory = '$DATA_DIR'" | sudo tee -a "$conf_dir/postgresql.conf" > /dev/null
-
-  # Ensure localhost access is allowed
-  sudo grep -q "::1/128" "$conf_dir/pg_hba.conf" || echo "host    all    all    ::1/128    scram-sha-256" | sudo tee -a "$conf_dir/pg_hba.conf" > /dev/null
-  sudo grep -q "127.0.0.1/32" "$conf_dir/pg_hba.conf" || echo "host    all    all    127.0.0.1/32    scram-sha-256" | sudo tee -a "$conf_dir/pg_hba.conf" > /dev/null
-
-  # Add replication access for replicas (with newline to avoid merge errors)
-  grep -q "host replication replicator 192.168.56.0/24 scram-sha-256" "$conf_dir/pg_hba.conf" || \
-  echo -e "\nhost replication replicator 192.168.56.0/24 scram-sha-256" | sudo tee -a "$conf_dir/pg_hba.conf" > /dev/null
-
-  sudo systemctl restart postgresql@$PG_VERSION-main
-  echo "[+] Configuration applied."
+  echo "data_directory = '$DATA_DIR'" | sudo tee -a "$conf_dir/postgresql.conf" > /dev/null
 }
 
-# Switch peer auth to md5 for local postgres login
+append_pg_hba_for_nodes() {
+  local hba="/etc/postgresql/$PG_VERSION/main/pg_hba.conf"
+  echo "[*] Adding pg_hba.conf access rules..."
+
+  for ip in "$replica1_ip" "$replica2_ip"; do
+    echo "host    all    postgres    $ip/32    scram-sha-256" | sudo tee -a "$hba" > /dev/null
+    echo "host    replication    replicator    $ip/32    scram-sha-256" | sudo tee -a "$hba" > /dev/null
+  done
+}
+
+configure_sync_standby_names() {
+  local conf="/etc/postgresql/$PG_VERSION/main/postgresql.conf"
+  echo "[*] Configuring synchronous_standby_names..."
+  sudo sed -i "/^synchronous_standby_names/d" "$conf"
+  echo "synchronous_standby_names = 'FIRST 1 ($replica1_name, $replica2_name)'" | sudo tee -a "$conf" > /dev/null
+}
+
 fix_pg_hba_auth() {
   local hba="/etc/postgresql/$PG_VERSION/main/pg_hba.conf"
   echo "[*] Switching peer auth to md5..."
   sudo sed -i 's/^local\s\+all\s\+postgres\s\+peer/local all postgres md5/' "$hba"
-  sudo systemctl restart postgresql@$PG_VERSION-main
 }
 
-# Wait until PostgreSQL is ready
 wait_for_postgres() {
   echo "[*] Waiting for PostgreSQL to become available..."
   for i in {1..30}; do
     if sudo -u postgres /usr/lib/postgresql/$PG_VERSION/bin/psql -p 5432 -c "SELECT 1;" &>/dev/null; then
       echo "[+] PostgreSQL is ready after $i seconds."
       return
-    else
-      echo "  ... still waiting ($i)"
-      sleep 1
     fi
+    sleep 1
   done
   echo "[!] PostgreSQL did not become ready in time. Aborting."
   exit 1
 }
 
-# Set password for postgres user
+disable_sync_replication() {
+  local conf="/etc/postgresql/$PG_VERSION/main/postgresql.conf"
+  echo "[*] Temporarily disabling synchronous replication..."
+  sudo sed -i "s/^synchronous_standby_names.*/synchronous_standby_names = ''/" "$conf" || echo "synchronous_standby_names = ''" | sudo tee -a "$conf" > /dev/null
+}
+
+restore_sync_replication() {
+  configure_sync_standby_names
+}
+
 set_postgres_password() {
   echo "[*] Setting password for postgres..."
   sudo -u postgres psql -p 5432 <<EOF
 SET synchronous_commit = off;
-ALTER USER postgres WITH PASSWORD '$POSTGRES_PW';
+ALTER USER postgres WITH PASSWORD '$postgres_pw';
 EOF
 }
 
-
-# Create or update replication user
 create_replication_user() {
-  echo "[*] Creating or updating replication user..."
+  echo "[*] Creating or updating replicator role..."
   sudo -u postgres psql -p 5432 <<EOF
 SET synchronous_commit = off;
 DO \$\$
 BEGIN
    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'replicator') THEN
-      CREATE ROLE replicator WITH REPLICATION LOGIN PASSWORD '$REPL_PASS';
+      CREATE ROLE replicator WITH REPLICATION LOGIN PASSWORD '$replicator_pw';
    ELSE
-      ALTER ROLE replicator WITH PASSWORD '$REPL_PASS';
+      ALTER ROLE replicator WITH PASSWORD '$replicator_pw';
    END IF;
 END
 \$\$;
 EOF
 }
 
-
-# Verify local connection
 verify_connection() {
-  echo "[*] Verifying connection..."
-  PGPASSWORD="$POSTGRES_PW" psql -U postgres -h 127.0.0.1 -p 5432 -c "SELECT current_user, inet_server_addr();" || {
+  echo "[*] Verifying local connection..."
+  PGPASSWORD="$postgres_pw" psql -U postgres -h 127.0.0.1 -p 5432 -c "SELECT current_user, inet_server_addr;" || {
     echo "[!] Connection failed."
     exit 1
   }
-  echo "[+] Connection verified."
+  echo "[+] Connection successful."
 }
 
-# Disable synchronous commit temporarily
-disable_sync_replication() {
-  local conf="/etc/postgresql/$PG_VERSION/main/postgresql.conf"
-  echo "[*] Temporarily disabling synchronous replication..."
-  sudo sed -i "s/^synchronous_standby_names.*/synchronous_standby_names = ''/" "$conf" || echo "synchronous_standby_names = ''" | sudo tee -a "$conf" > /dev/null
-  sudo systemctl restart postgresql@$PG_VERSION-main
+reset_pg_ha_config() {
+  local config_path="/etc/pg_ha.conf"
+  if [ -f "$config_path" ]; then
+    echo "[*] Removing existing pg_ha.conf configuration..."
+    sudo rm -f "$config_path"
+  fi
 }
 
-
-# Restore synchronous commit after setup
-restore_sync_replication() {
-  local conf="/etc/postgresql/$PG_VERSION/main/postgresql.conf"
-  echo "[*] Restoring synchronous replication setting..."
-  sudo sed -i "s/^synchronous_standby_names.*/synchronous_standby_names = 'FIRST 1 (pg_replica1, pg_replica2)'/" "$conf"
-  sudo systemctl restart postgresql@$PG_VERSION-main
-}
-
-prompt_replica_names() {
-  echo -n "📛 Enter name for replica 1 (e.g. pg_replica1): "
-  read REPL1_NAME
-  echo -n "📛 Enter name for replica 2 (e.g. pg_replica2): "
-  read REPL2_NAME
-
-  echo "[*] Configuring synchronous_standby_names..."
-  sed -i "/^synchronous_standby_names/d" /etc/postgresql/$PG_VERSION/main/postgresql.conf
-  echo -e "\nsynchronous_standby_names = 'FIRST 1 ($REPL1_NAME, $REPL2_NAME)'" >> /etc/postgresql/$PG_VERSION/main/postgresql.conf
-}
-
-# Main setup function
 setup_master() {
-  echo "=== 🚀 Setting up master node ==="
+  echo "=== 🚀 MASTER NODE SETUP STARTING ==="
   sudo apt update && sudo apt install -y postgresql postgresql-contrib
-
+  reset_pg_ha_config
   detect_pg_version
   clean_broken_cluster
   ensure_postgres_user
-  prompt_postgres_password
-  prompt_replicator_password
+  collect_node_config
+  source "$PGHA_CONFIG"
+
   ensure_cluster_exists
-  prompt_replica_names
   apply_config_files
+  append_pg_hba_for_nodes
+  configure_sync_standby_names
   fix_pg_hba_auth
+  sudo systemctl restart postgresql@$PG_VERSION-main
   wait_for_postgres
 
   disable_sync_replication
-
   set_postgres_password
   create_replication_user
-
   restore_sync_replication
-
+  sudo systemctl restart postgresql@$PG_VERSION-main
   verify_connection
 
   echo -e "\n✅ Master setup complete."
-  echo "🔑 Use this password in replica setup: $REPL_PASS"
-  unset REPL_PASS
+  echo "🔑 Use this password in replica setup: $replicator_pw"
+  unset replicator_pw
 }
-
 
 setup_master
