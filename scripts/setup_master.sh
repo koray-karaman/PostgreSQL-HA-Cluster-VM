@@ -55,6 +55,7 @@ ensure_cluster_exists() {
 # Apply custom configuration files
 apply_config_files() {
   echo "[*] Applying PostgreSQL configuration..."
+  sudo chown postgres:postgres "$conf_dir/pg_hba.conf"
   local conf_dir="/etc/postgresql/$PG_VERSION/main"
 
   sudo cp "$CONFIG_DIR/postgresql.conf" "$conf_dir/postgresql.conf"
