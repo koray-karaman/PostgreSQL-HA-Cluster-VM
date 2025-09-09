@@ -1,7 +1,6 @@
 #!/bin/bash
 
 PGHA_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-PGHA_CONFIG="/etc/pg_ha.conf"
 CONFIG_DIR="$PGHA_DIR/configs"
 PG_VERSION=""
 DATA_DIR=""
@@ -12,12 +11,6 @@ detect_pg_version() {
 }
 
 collect_node_config() {
-  local config_path="/etc/pg_ha.conf"
-  if [ -f "$config_path" ]; then
-    echo "[*] Removing existing pg_ha.conf configuration..."
-    sudo rm -f "$config_path"
-  fi
-
   echo "🧠 Starting PostgreSQL HA configuration..."
 
   echo "🌐 MASTER NODE Information:"
@@ -37,23 +30,6 @@ collect_node_config() {
   echo
   read -s -p "  ➤ Password for 'replicator' user: " REPL_PASS
   echo
-
-  if [ -f "$PGHA_CONFIG" ]; then
-    echo "[*] Removing existing pg_ha.conf configuration..."
-    sudo rm -f "$PGHA_CONFIG"
-  fi
-  
-  echo "📦 Saving configuration to → $PGHA_CONFIG"
-  sudo tee "$PGHA_CONFIG" > /dev/null <<EOF
-master_name=$MASTER_NAME
-master_ip=$MASTER_IP
-replica1_name=$REPL1_NAME
-replica1_ip=$REPL1_IP
-replica2_name=$REPL2_NAME
-replica2_ip=$REPL2_IP
-postgres_pw=$POSTGRES_PW
-replicator_pw=$REPL_PASS
-EOF
 }
 
 clean_broken_cluster() {
@@ -71,7 +47,7 @@ ensure_postgres_user() {
 
 ensure_cluster_exists() {
   echo "[*] Creating PostgreSQL cluster..."
-  sudo pg_createcluster "$PG_VERSION" main --start
+  sudo pg_createcluster "$PG_VERSION" main
 }
 
 apply_config_files() {
@@ -83,6 +59,10 @@ apply_config_files() {
 
   sudo sed -i '/^data_directory\s*=.*/d' "$conf_dir/postgresql.conf"
   echo "data_directory = '$DATA_DIR'" | sudo tee -a "$conf_dir/postgresql.conf" > /dev/null
+
+  # Ensure localhost access
+  grep -q "::1/128" "$conf_dir/pg_hba.conf" || echo "host all all ::1/128 scram-sha-256" | sudo tee -a "$conf_dir/pg_hba.conf" > /dev/null
+  grep -q "127.0.0.1/32" "$conf_dir/pg_hba.conf" || echo "host all all 127.0.0.1/32 scram-sha-256" | sudo tee -a "$conf_dir/pg_hba.conf" > /dev/null
 }
 
 append_pg_hba_for_nodes() {
@@ -90,8 +70,8 @@ append_pg_hba_for_nodes() {
   echo "[*] Adding pg_hba.conf access rules..."
 
   for ip in "$REPL1_IP" "$REPL2_IP"; do
-    echo "host    all    postgres    $ip/32    scram-sha-256" | sudo tee -a "$hba" > /dev/null
-    echo "host    replication    replicator    $ip/32    scram-sha-256" | sudo tee -a "$hba" > /dev/null
+    echo "host all postgres $ip/32 scram-sha-256" | sudo tee -a "$hba" > /dev/null
+    echo "host replication replicator $ip/32 scram-sha-256" | sudo tee -a "$hba" > /dev/null
   done
 }
 
@@ -171,7 +151,6 @@ setup_master() {
   clean_broken_cluster
   ensure_postgres_user
   collect_node_config
-  source "$PGHA_CONFIG"
 
   ensure_cluster_exists
   apply_config_files
@@ -189,8 +168,7 @@ setup_master() {
   verify_connection
 
   echo -e "\n✅ Master setup complete."
-  echo "🔑 Use this password in replica setup: $replicator_pw"
-  unset replicator_pw
+  echo "🔑 Use this password in replica setup: $REPL_PASS"
 }
 
 setup_master
