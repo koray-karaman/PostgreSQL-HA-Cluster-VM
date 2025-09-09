@@ -1,7 +1,7 @@
 #!/bin/bash
 
 
-PGHA_DIR="$(cd "$(dirname "$0")" && pwd)"
+PGHA_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PGHA_CONFIG="/etc/pg_ha.conf"
 CONFIG_DIR="$PGHA_DIR/configs"
 PG_VERSION=""
