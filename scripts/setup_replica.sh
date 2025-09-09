@@ -120,6 +120,15 @@ verify_postgres_password() {
   fi
 }
 
+prompt_replica_identity() {
+  echo -n "📛 Enter this replica's name (must match master's config): "
+  read THIS_REPL_NAME
+
+  echo "[*] Setting application_name for replication..."
+  sed -i "/^primary_conninfo/d" /etc/postgresql/$PG_VERSION/main/postgresql.conf
+  echo -e "\nprimary_conninfo = 'host=$MASTER_IP port=5432 user=replicator password=$REPL_PASS application_name=$THIS_REPL_NAME'" >> /etc/postgresql/$PG_VERSION/main/postgresql.conf
+}
+
 # Main setup function
 setup_replica() {
   echo "=== 🛰️ Setting up replica node ==="
@@ -139,6 +148,8 @@ setup_replica() {
 
   echo "[*] Performing base backup from master ($MASTER_IP)..."
   sudo -u postgres PGPASSWORD="$REPL_PASS" pg_basebackup -h "$MASTER_IP" -D "$DATA_DIR" -U replicator -P -R
+
+  prompt_replica_identity
 
   apply_config_files
   fix_pg_hba_auth
