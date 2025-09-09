@@ -1,5 +1,4 @@
 #!/bin/bash
-cd /tmp || true
 
 PGHA_DIR="$(cd "$(dirname "$0")" && pwd)"
 SCRIPTS_DIR="$PGHA_DIR/scripts"
